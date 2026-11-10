@@ -1,4 +1,14 @@
+import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router';
+
+import Spinner from '../../../components/ui/Spinner';
+import {
+  getPlatformMetrics,
+  listTransactions,
+  listUsers,
+} from '../../../services/adminApi';
+import { enToFaDigits, formatToman } from '../../../services/courseApi';
 
 const container = {
   hidden: {},
@@ -34,122 +44,153 @@ const iconDrop = {
   },
 };
 
-const statsCards = [
-  {
-    icon: '/icons/user-green.svg',
-    count: '61',
-    title: 'تعداد کل کاربران',
-    sub: 'کاربران ثبت‌نام شده',
-  },
-  {
-    icon: '/icons/user-blue.svg',
-    count: '6',
-    title: 'کاربران این ماه',
-    sub: 'کاربر جدید یک ماه اخیر',
-  },
-  {
-    icon: '/icons/book-active.svg',
-    count: '3',
-    title: 'تعداد دوره‌ها',
-    sub: 'دوره‌های فعال پلتفرم',
-  },
-  {
-    icon: '/icons/book-green.svg',
-    count: '49',
-    title: 'ثبت‌نام دوره‌ها',
-    sub: 'مجموع ثبت‌نام‌ها',
-  },
-  {
-    icon: '/icons/medal-brown.svg',
-    count: '7',
-    title: 'گواهینامه صادر شده',
-    sub: 'گواهی‌های تکمیل دوره',
-  },
-  {
-    icon: '/icons/wallet-blue.svg',
-    count: '49',
-    title: 'تراکنش‌های پلتفرم',
-    sub: 'کل تراکنش‌ها',
-  },
-  {
-    icon: '/icons/wallet-green.svg',
-    count: '11',
-    title: 'تراکنش‌های این ماه',
-    sub: 'یک ماه اخیر',
-  },
-  {
-    icon: '/icons/message-blue.svg',
-    count: '9',
-    title: 'تیکت‌های باز و فعال',
-    sub: 'در انتظار پاسخ',
-  },
+const FALLBACK_MONTHS = [
+  'فروردین',
+  'اردیبهشت',
+  'خرداد',
+  'تیر',
+  'مرداد',
+  'شهریور',
 ];
 
-const revenueData = [
-  { month: 'مرداد', value: 8 },
-  { month: 'شهریور', value: 22 },
-  { month: 'مهر', value: 4 },
-  { month: 'آبان', value: 20 },
-  { month: 'آذر', value: 30 },
-  { month: 'دی', value: 14 },
-];
+function PanelAdminDashboard() {
+  const { data: metrics, isLoading } = useQuery({
+    queryKey: ['admin-platform-metrics'],
+    queryFn: getPlatformMetrics,
+  });
 
-const enrollmentData = [
-  { month: 'مرداد', value: 4 },
-  { month: 'شهریور', value: 8 },
-  { month: 'مهر', value: 2 },
-  { month: 'آبان', value: 9 },
-  { month: 'آذر', value: 2 },
-  { month: 'دی', value: 5 },
-];
+  const { data: recentUsersData } = useQuery({
+    queryKey: ['admin-users', { page: 1, limit: 3 }],
+    queryFn: () => listUsers({ page: 1, limit: 3 }),
+  });
 
-const activities = [
-  {
-    icon: '/icons/user-green.svg',
-    title: 'کاربر جدید ثبت‌نام کرد',
-    desc: 'سارا محمدی به پلتفرم پیوست',
-    time: '۵ دقیقه پیش',
-    tag: 'کاربر',
-    tagClass: 'bg-[#DCFCE7] text-[#15803D]',
-  },
-  {
-    icon: '/icons/book-active.svg',
-    title: 'ثبت‌نام در دوره جدید',
-    desc: 'رضا کریمی در دوره React پیشرفته ثبت‌نام کرد',
-    time: '۲۲ دقیقه پیش',
-    tag: 'دوره',
-    tagClass: 'bg-[#DCE5F4] text-[#193B73]',
-  },
-  {
-    icon: '/icons/wallet-green.svg',
-    title: 'تراکنش موفق',
-    desc: 'پرداخت ۱,۲۰۰,۰۰۰ تومان برای دوره Figma',
-    time: '۱ ساعت پیش',
-    tag: 'مالی',
-    tagClass: 'bg-[#DCFCE7] text-[#15803D]',
-  },
-  {
-    icon: '/icons/medal-brown.svg',
-    title: 'گواهینامه صادر شد',
-    desc: 'گواهی تکمیل دوره تحلیل داده برای مریم احمدی',
-    time: '۳ ساعت پیش',
-    tag: 'گواهی',
-    tagClass: 'bg-[#FFF3DC] text-[#B07D00]',
-  },
-  {
-    icon: '/icons/message-blue.svg',
-    title: 'تیکت جدید ثبت شد',
-    desc: 'مشکل در پخش ویدیوی جلسه ۷',
-    time: 'دیروز · ۱۴:۳۲',
-    tag: 'پشتیبانی',
-    tagClass: 'bg-[#FEE2E2] text-[#B91C1C]',
-  },
-];
+  const { data: recentTxData } = useQuery({
+    queryKey: ['admin-transactions', { page: 1, limit: 3 }],
+    queryFn: () => listTransactions({ page: 1, limit: 3 }),
+  });
 
-const maxRevenue = Math.max(...revenueData.map((d) => d.value));
-const maxEnrollment = Math.max(...enrollmentData.map((d) => d.value));
+  if (isLoading) {
+    return (
+      <div className="flex min-h-320 w-full items-center justify-center">
+        <Spinner className="text-primary-600 h-36 w-36" />
+      </div>
+    );
+  }
 
-export default function PanelDashboard() {
+  const totalUsers = metrics?.total_users ?? 0;
+  const totalCourses = metrics?.total_courses ?? 0;
+  const totalEnrollments = metrics?.total_enrollments ?? 0;
+  const totalArticles = metrics?.total_articles ?? 0;
+  const openTicketsCount = metrics?.open_tickets_count ?? 0;
+  const totalRevenue = metrics?.total_revenue ?? 0;
+  const monthlyStats = Array.isArray(metrics?.monthly_stats)
+    ? metrics.monthly_stats
+    : [];
+
+  const totalOrdersCount = monthlyStats.reduce(
+    (sum, s) => sum + Number(s.orders_count ?? 0),
+    0,
+  );
+  const currentMonthOrders = Number(monthlyStats[0]?.orders_count ?? 0);
+
+  const statsCards = [
+    {
+      icon: '/icons/user-green.svg',
+      count: enToFaDigits(totalUsers),
+      title: 'تعداد کل کاربران',
+      sub: 'کاربران ثبت‌نام شده',
+    },
+    {
+      icon: '/icons/user-blue.svg',
+      count: enToFaDigits(totalArticles),
+      title: 'مقالات منتشر شده',
+      sub: 'محتوای وبلاگ آموزشی',
+    },
+    {
+      icon: '/icons/book-active.svg',
+      count: enToFaDigits(totalCourses),
+      title: 'تعداد دوره‌ها',
+      sub: 'دوره‌های فعال پلتفرم',
+    },
+    {
+      icon: '/icons/book-green.svg',
+      count: enToFaDigits(totalEnrollments),
+      title: 'ثبت‌نام دوره‌ها',
+      sub: 'مجموع ثبت‌نام‌ها',
+    },
+    {
+      icon: '/icons/medal-brown.svg',
+      count: formatToman(totalRevenue),
+      title: 'کل درآمد پلتفرم',
+      sub: 'تومان (پرداخت‌های موفق)',
+    },
+    {
+      icon: '/icons/wallet-blue.svg',
+      count: enToFaDigits(totalOrdersCount || (recentTxData?.total_items ?? 0)),
+      title: 'تراکنش‌های پلتفرم',
+      sub: 'کل تراکنش‌ها',
+    },
+    {
+      icon: '/icons/wallet-green.svg',
+      count: enToFaDigits(currentMonthOrders),
+      title: 'تراکنش‌های این ماه',
+      sub: 'یک ماه اخیر',
+    },
+    {
+      icon: '/icons/message-blue.svg',
+      count: enToFaDigits(openTicketsCount),
+      title: 'تیکت‌های باز و فعال',
+      sub: 'در انتظار پاسخ',
+    },
+  ];
+
+  const revenueChartData =
+    monthlyStats.length > 0
+      ? monthlyStats
+          .slice(0, 6)
+          .reverse()
+          .map((item) => ({
+            month: item.month,
+            value: Math.max(
+              1,
+              Math.round(Number(item.total_amount || 0) / 1000000),
+            ),
+          }))
+      : FALLBACK_MONTHS.map((m) => ({ month: m, value: 0 }));
+
+  const enrollmentChartData =
+    monthlyStats.length > 0
+      ? monthlyStats
+          .slice(0, 6)
+          .reverse()
+          .map((item) => ({
+            month: item.month,
+            value: Number(item.orders_count || 0),
+          }))
+      : FALLBACK_MONTHS.map((m) => ({ month: m, value: 0 }));
+
+  const maxRevenue = Math.max(1, ...revenueChartData.map((d) => d.value));
+  const maxEnrollment = Math.max(1, ...enrollmentChartData.map((d) => d.value));
+
+  const recentActivities = [
+    ...(recentUsersData?.items || []).slice(0, 2).map((u) => ({
+      icon: '/icons/user-green.svg',
+      title: 'کاربر ثبت‌نام شده',
+      desc: `${u.name} (${u.mobile}) در پلتفرم عضو شد`,
+      time: u.joined,
+      tag: 'کاربر',
+      tagClass: 'bg-[#DCFCE7] text-[#15803D]',
+    })),
+    ...(recentTxData?.items || []).slice(0, 3).map((tx) => ({
+      icon: '/icons/wallet-green.svg',
+      title: `تراکنش ${tx.status}`,
+      desc: `${tx.student} · ${tx.course} (${tx.amount} تومان)`,
+      time: tx.date,
+      tag: 'مالی',
+      tagClass: tx.statusClass,
+    })),
+  ];
+
   return (
     <>
       <motion.div
@@ -164,7 +205,7 @@ export default function PanelDashboard() {
               پلتفرم آموزش کدکدا
             </h1>
             <p className="pt-8 text-[12px] text-[#FFFFFF80]">
-              خلاصه وضعیت سیستم، آمار عملکرد آموزشی
+              خلاصه وضعیت سیستم، آمار عملکرد آموزشی و گزارش مالی زنده
             </p>
           </div>
 
@@ -222,7 +263,7 @@ export default function PanelDashboard() {
           </div>
 
           <div className="mt-25 flex h-180 items-end justify-between gap-10">
-            {revenueData.map((item, i) => (
+            {revenueChartData.map((item, i) => (
               <div
                 key={i}
                 className="flex h-full flex-1 flex-col items-center justify-end gap-8"
@@ -262,7 +303,7 @@ export default function PanelDashboard() {
           </div>
 
           <div className="mt-25 flex flex-col gap-14">
-            {enrollmentData.map((item, i) => (
+            {enrollmentChartData.map((item, i) => (
               <div key={i} className="flex items-center gap-12">
                 <span className="w-50 text-[11px] font-bold text-[#1C2B4A]">
                   {item.month}
@@ -282,7 +323,7 @@ export default function PanelDashboard() {
                   />
                 </div>
                 <span className="text-primary-600 w-30 text-left text-[11px] font-black">
-                  {item.value}
+                  {enToFaDigits(item.value)}
                 </span>
               </div>
             ))}
@@ -305,54 +346,65 @@ export default function PanelDashboard() {
               آخرین فعالیت‌های سیستم
               <span className="bg-secondary-300 absolute top-2 -left-10 h-16 w-4 rounded-full shadow-[0px_0px_6px_0px_#F7B928AA]"></span>
             </span>
-            <button className="text-primary-600 cursor-pointer rounded-full bg-[#DCE5F4] px-12 py-4 text-[11px] font-bold transition duration-200 hover:bg-[#C9D7EC]">
+            <Link
+              to="/panel-admin/finance"
+              className="text-primary-600 cursor-pointer rounded-full bg-[#DCE5F4] px-12 py-4 text-[11px] font-bold transition duration-200 hover:bg-[#C9D7EC]"
+            >
               مشاهده همه ←
-            </button>
+            </Link>
           </div>
 
           <div className="mt-20 flex flex-col gap-10">
-            {activities.map((item, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -40 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{
-                  duration: 0.5,
-                  delay: 0.4 + i * 0.08,
-                  ease: 'easeOut',
-                }}
-                whileHover={{ x: -4 }}
-                className="flex items-center justify-between gap-12 rounded-xl bg-[#E4E9F2] p-12 shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666]"
-              >
-                <div className="flex items-center gap-12">
-                  <div className="flex h-44 w-44 shrink-0 items-center justify-center rounded-xl bg-[#EDF1F8] shadow-[-2px_-2px_6px_0px_#FFFFFFE5,_3px_3px_8px_0px_#A3B1C673]">
-                    <img src={item.icon} alt="" />
+            {recentActivities.length > 0 ? (
+              recentActivities.map((item, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -40 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{
+                    duration: 0.5,
+                    delay: 0.4 + i * 0.08,
+                    ease: 'easeOut',
+                  }}
+                  whileHover={{ x: -4 }}
+                  className="flex items-center justify-between gap-12 rounded-xl bg-[#E4E9F2] p-12 shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666]"
+                >
+                  <div className="flex items-center gap-12">
+                    <div className="flex h-44 w-44 shrink-0 items-center justify-center rounded-xl bg-[#EDF1F8] shadow-[-2px_-2px_6px_0px_#FFFFFFE5,_3px_3px_8px_0px_#A3B1C673]">
+                      <img src={item.icon} alt="" />
+                    </div>
+                    <div className="flex flex-col gap-4">
+                      <span className="text-xs font-bold text-[#1C2B4A]">
+                        {item.title}
+                      </span>
+                      <span className="text-[11px] text-[#8A96B0]">
+                        {item.desc}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-4">
-                    <span className="text-xs font-bold text-[#1C2B4A]">
-                      {item.title}
-                    </span>
-                    <span className="text-[11px] text-[#8A96B0]">
-                      {item.desc}
-                    </span>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-12">
-                  <span className="hidden text-[10px] font-bold text-[#8A96B0] sm:block">
-                    {item.time}
-                  </span>
-                  <span
-                    className={`rounded-full px-10 py-2 text-[10px] font-bold ${item.tagClass}`}
-                  >
-                    {item.tag}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
+                  <div className="flex items-center gap-12">
+                    <span className="hidden text-[10px] font-bold text-[#8A96B0] sm:block">
+                      {item.time}
+                    </span>
+                    <span
+                      className={`rounded-full px-10 py-2 text-[10px] font-bold ${item.tagClass}`}
+                    >
+                      {item.tag}
+                    </span>
+                  </div>
+                </motion.div>
+              ))
+            ) : (
+              <div className="rounded-xl bg-[#E4E9F2] p-16 text-center text-xs text-[#8A96B0]">
+                هنوز فعالیتی در سیستم ثبت نشده است.
+              </div>
+            )}
           </div>
         </motion.div>
       </motion.section>
     </>
   );
 }
+
+export default PanelAdminDashboard;

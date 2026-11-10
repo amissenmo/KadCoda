@@ -1,66 +1,18 @@
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router';
+
+import Spinner from '../../components/ui/Spinner';
+import { getCourses } from '../../services/courseApi';
 import CourseCard from './CourseCard';
 
-const courses = [
-  {
-    id: 2,
-    title: 'دوره نکست جی اس',
-    description:
-      'ساخت پروژه‌های مدرن با Next.js، SSR، App Router و API Routes.',
-    image: '/images/next.png',
-    slug: 'nextjs-course',
-    hours: 22,
-    price: '2,350,000 تومان',
-  },
-  {
-    id: 3,
-    title: 'دوره تیلویند',
-    description: 'طراحی رابط کاربری حرفه‌ای با Tailwind CSS و پروژه عملی.',
-    image: '/images/tailwind.jpg',
-    slug: 'tailwind-course',
-    hours: 12,
-    price: '1,250,000 تومان',
-  },
-  {
-    id: 4,
-    title: 'دوره جاوااسکریپت پیشرفته',
-    description:
-      'یادگیری مفاهیم پیشرفته جاوااسکریپت همراه با مثال‌های کاربردی.',
-    image: '/images/javascript.jpg',
-    slug: 'javascript-course',
-    hours: 25,
-    price: '2,150,000 تومان',
-  },
-
-  {
-    id: 6,
-    title: 'دوره Node.js',
-    description: 'توسعه بک‌اند با Node.js، Express و ساخت REST API.',
-    image: '/images/nodejs.jpg',
-    slug: 'nodejs-course',
-    hours: 28,
-    price: '2,650,000 تومان',
-  },
-  {
-    id: 7,
-    title: 'دوره MongoDB',
-    description: 'کار با MongoDB و طراحی دیتابیس برای پروژه‌های واقعی.',
-    image: '/images/mongodb.png',
-    slug: 'mongodb-course',
-    hours: 14,
-    price: '1,450,000 تومان',
-  },
-  {
-    id: 8,
-    title: 'دوره Git و GitHub',
-    description: 'مدیریت نسخه، همکاری تیمی و کار حرفه‌ای با Git و GitHub.',
-    image: '/images/git.jpg',
-    slug: 'git-course',
-    hours: 10,
-    price: '950,000 تومان',
-  },
-];
-
 export default function LastCourses() {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['courses', { sort: 'newest', limit: 8 }],
+    queryFn: () => getCourses({ sort: 'newest', limit: 8 }),
+  });
+
+  const courses = data?.items || [];
+
   return (
     <section className="py-56 md:py-72 lg:py-96">
       <div className="container">
@@ -72,20 +24,37 @@ export default function LastCourses() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 sm:gap-32 lg:grid-cols-4">
-          {courses.map((course) => (
-            <CourseCard
-              mobileHorizontal={true}
-              key={course.id}
-              course={course}
-            />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex min-h-260 w-full items-center justify-center">
+            <Spinner className="border-primary-600/30 border-t-primary-600 h-40 w-40" />
+          </div>
+        ) : isError ? (
+          <div className="rounded-2xl bg-[#FEE2E2] p-24 text-center text-sm font-bold text-[#B91C1C]">
+            خطا در بارگذاری لیست دوره‌ها
+          </div>
+        ) : courses.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-300 p-32 text-center text-sm text-gray-500">
+            هنوز دوره‌ای منتشر نشده است.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 sm:gap-32 lg:grid-cols-4">
+            {courses.map((course) => (
+              <CourseCard
+                mobileHorizontal={true}
+                key={course.id || course.slug}
+                course={course}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="mt-32 flex w-full items-center justify-center">
-          <button className="shadow-primary-900/30 hover:bg-primary-900 hover:text-primary-50 cursor-pointer rounded-md px-10 py-12 text-sm shadow-xs transition duration-300">
+          <Link
+            to="/archive"
+            className="shadow-primary-900/30 hover:bg-primary-900 hover:text-primary-50 cursor-pointer rounded-md px-10 py-12 text-sm shadow-xs transition duration-300"
+          >
             مشاهده همه دوره ها
-          </button>
+          </Link>
         </div>
       </div>
     </section>

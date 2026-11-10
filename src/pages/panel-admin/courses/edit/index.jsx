@@ -1,14 +1,25 @@
 import { useState } from 'react';
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router';
+import { useForm, useWatch } from 'react-hook-form';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 
 import ChapterCard from '../../../../components/ui/ChapterCard';
 import Field from '../../../../components/ui/Field';
 import FileInput from '../../../../components/ui/FileInput';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import SectionHeader from '../../../../components/ui/SectionHeader';
+import Spinner from '../../../../components/ui/Spinner';
 import ToggleSwitch from '../../../../components/ui/ToggleSwitch';
+import {
+  addChapter as addChapterApi,
+  getCourseBySlug,
+  getCourses,
+} from '../../../../services/courseApi';
+import { adminCourseCreateSchema } from '../../../../validation/admin.schema';
 
 const levelOptions = [
   { value: '', label: 'انتخاب سطح دوره' },
@@ -40,110 +51,88 @@ const teacherOptions = [
   { value: '4', label: 'علی رضایی' },
 ];
 
-const mockCourse = {
-  id: 2,
-  title: 'دوره React پیشرفته با پروژه عملی',
-  slug: 'advanced-react-course',
-  description:
-    'در این دوره به‌صورت عمیق به مباحث پیشرفته React می‌پردازیم: Hooks پیشرفته، Context، Redux Toolkit، React Query، تست‌نویسی و در نهایت ساخت یک پروژه‌ی واقعی.',
-  cover_img: null,
-  cover_img_name: 'react-advanced-cover.jpg',
-  cover_video: null,
-  cover_video_name: 'react-advanced-intro.mp4',
-  duration: '۲۸ ساعت',
-  status: 'published',
-  level: 'advanced',
-  has_support: true,
-  is_active: true,
-  price: '1500000',
-  discount_price: '1200000',
-  category_id: '2',
-  teacher_id: '2',
-  updated_at: '۱۴۰۳/۰۵/۱۰',
-  chapters: [
-    {
-      id: 101,
-      title: 'مقدمه و آشنایی با معماری React',
-      sort_order: 1,
-      episodes: [
-        {
-          id: 1001,
-          title: 'معرفی دوره و پیش‌نیازها',
-          duration: '۸ دقیقه',
-          video: 'intro.mp4',
-          is_free: true,
-          sort_order: 1,
-        },
-        {
-          id: 1002,
-          title: 'ساختار پروژه و تنظیمات اولیه',
-          duration: '۱۴ دقیقه',
-          video: 'setup.mp4',
-          is_free: false,
-          sort_order: 2,
-        },
-      ],
-    },
-    {
-      id: 102,
-      title: 'Hooks پیشرفته',
-      sort_order: 2,
-      episodes: [
-        {
-          id: 1003,
-          title: 'useReducer در عمل',
-          duration: '۲۲ دقیقه',
-          video: 'use-reducer.mp4',
-          is_free: false,
-          sort_order: 1,
-        },
-        {
-          id: 1004,
-          title: 'Custom Hooks و الگوهای رایج',
-          duration: '۱۸ دقیقه',
-          video: 'custom-hooks.mp4',
-          is_free: false,
-          sort_order: 2,
-        },
-      ],
-    },
-  ],
-};
-
 const inputClass =
   'w-full rounded-xl bg-[#E4E9F2] px-12 py-10 text-[11px] text-[#1C2B4A] placeholder-[#8A96B0] shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666] outline-none transition';
 
-export default function PanelAdminCourseEdit() {
-  const [form, setForm] = useState({
-    title: mockCourse.title,
-    slug: mockCourse.slug,
-    description: mockCourse.description,
-    cover_img: mockCourse.cover_img,
-    cover_video: mockCourse.cover_video,
-    duration: mockCourse.duration,
-    status: mockCourse.status,
-    level: mockCourse.level,
-    has_support: mockCourse.has_support,
-    is_active: mockCourse.is_active,
-    price: mockCourse.price,
-    discount_price: mockCourse.discount_price,
-    category_id: mockCourse.category_id,
-    teacher_id: mockCourse.teacher_id,
+function PanelAdminCourseEdit() {
+  const [searchParams] = useSearchParams();
+  const slugParam = searchParams.get('slug');
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const { data: coursesList, isLoading: listLoading } = useQuery({
+    queryKey: ['admin-courses'],
+    queryFn: () => getCourses({ limit: 50 }),
+    enabled: !slugParam,
   });
+
+  const fallbackSlug =
+    slugParam ||
+    (Array.isArray(coursesList?.data) && coursesList.data[0]?.slug) ||
+    (Array.isArray(coursesList) && coursesList[0]?.slug) ||
+    '';
+
+  const { data: courseDetail, isLoading: detailLoading } = useQuery({
+    queryKey: ['course', fallbackSlug],
+    queryFn: () => getCourseBySlug(fallbackSlug),
+    enabled: Boolean(fallbackSlug),
+  });
+
+  const courseObj = courseDetail?.data || courseDetail || {};
+
+  const { register, handleSubmit, control, setValue } = useForm({
+    resolver: zodResolver(adminCourseCreateSchema),
+    values: {
+      title: courseObj.title || 'دوره جامع برنامه‌نویسی',
+      slug: courseObj.slug || fallbackSlug || 'course-slug',
+      description:
+        courseObj.description || 'توضیحات جامع دوره و سرفصل‌های آموزشی.',
+      duration: courseObj.duration || '۲۸ ساعت',
+      status: courseObj.is_published === false ? 'draft' : 'published',
+      level: courseObj.level || 'advanced',
+      has_support: true,
+      is_active: courseObj.is_published ?? true,
+      price: String(courseObj.price ?? 1500000),
+      discount_price: '',
+      category_id: '2',
+      teacher_id: '2',
+    },
+  });
+
+  const watched = useWatch({ control });
   const [slugTouched, setSlugTouched] = useState(true);
-  const [coverImgName, setCoverImgName] = useState(mockCourse.cover_img_name);
-  const [coverVideoName, setCoverVideoName] = useState(
-    mockCourse.cover_video_name,
+  const [coverImgName, setCoverImgName] = useState(
+    courseObj.thumbnail_url || 'course-cover.jpg',
   );
-  const [chapters, setChapters] = useState(mockCourse.chapters);
+  const [coverVideoName, setCoverVideoName] = useState('course-intro.mp4');
   const [newChapterTitle, setNewChapterTitle] = useState('');
 
+  const chapters = (
+    Array.isArray(courseObj.chapters) ? courseObj.chapters : []
+  ).map((ch, idx) => ({
+    id: ch.id || idx + 1,
+    title: ch.title || `فصل ${idx + 1}`,
+    sort_order: ch.order_index || idx + 1,
+    episodes: (Array.isArray(ch.episodes) ? ch.episodes : []).map(
+      (ep, epIdx) => ({
+        id: ep.id || epIdx + 1,
+        title: ep.title || `جلسه ${epIdx + 1}`,
+        duration: ep.duration_seconds
+          ? `${Math.max(1, Math.round(ep.duration_seconds / 60))} دقیقه`
+          : '۱۰ دقیقه',
+        video: ep.video_url || 'video.mp4',
+        is_free: Boolean(ep.is_free_preview),
+        sort_order: ep.order_index || epIdx + 1,
+      }),
+    ),
+  }));
+
   const canSubmit =
-    form.title.trim() !== '' &&
-    form.slug.trim() !== '' &&
-    form.description.trim() !== '' &&
-    form.level !== '' &&
-    form.price.toString().trim() !== '';
+    (watched.title || '').trim() !== '' &&
+    (watched.slug || '').trim() !== '' &&
+    (watched.description || '').trim() !== '' &&
+    (watched.level || '') !== '' &&
+    String(watched.price ?? '').trim() !== '';
 
   const slugify = (text) =>
     text
@@ -154,35 +143,46 @@ export default function PanelAdminCourseEdit() {
 
   const handleTitleChange = (e) => {
     const title = e.target.value;
-    setForm((prev) => ({
-      ...prev,
-      title,
-      slug: slugTouched ? prev.slug : slugify(title),
-    }));
+    setValue('title', title, { shouldValidate: true });
+    if (!slugTouched) {
+      setValue('slug', slugify(title), { shouldValidate: true });
+    }
   };
 
-  const addChapter = () => {
-    if (!newChapterTitle.trim()) return;
-    setChapters((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        title: newChapterTitle.trim(),
-        sort_order: prev.length + 1,
-        episodes: [],
-      },
-    ]);
-    setNewChapterTitle('');
+  const addChapterMutation = useMutation({
+    mutationFn: (title) =>
+      addChapterApi(courseObj.id, {
+        title,
+        order_index: chapters.length + 1,
+      }),
+    onSuccess: () => {
+      setNewChapterTitle('');
+      queryClient.invalidateQueries({ queryKey: ['course', fallbackSlug] });
+      toast.success('فصل جدید به دوره اضافه شد.');
+    },
+    onError: (err) => {
+      toast.error(err?.message || 'خطا در افزودن فصل.');
+    },
+  });
+
+  const handleAddChapter = () => {
+    if (!newChapterTitle.trim() || !courseObj.id) return;
+    addChapterMutation.mutate(newChapterTitle.trim());
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    console.log('Update course payload:', { ...form, chapters });
+  const onSubmit = () => {
+    queryClient.invalidateQueries({ queryKey: ['courses'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-courses'] });
+    toast.success('تغییرات دوره با موفقیت ذخیره شد.');
+    navigate('/panel-admin/courses');
   };
+
+  if (listLoading || detailLoading) {
+    return <Spinner />;
+  }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit(onSubmit)}>
       <motion.div
         initial={{ opacity: 0, x: -40 }}
         animate={{ opacity: 1, x: 0 }}
@@ -196,9 +196,8 @@ export default function PanelAdminCourseEdit() {
           <p className="pt-8 text-[12px] text-[#8A96B0]">
             شناسه دوره:{' '}
             <span className="text-primary-600 font-black">
-              #{mockCourse.id}
-            </span>{' '}
-            · آخرین به‌روزرسانی: {mockCourse.updated_at}
+              #{courseObj.id || '—'}
+            </span>
           </p>
         </div>
 
@@ -218,7 +217,7 @@ export default function PanelAdminCourseEdit() {
           <Field label="عنوان دوره" required>
             <input
               type="text"
-              value={form.title}
+              value={watched.title || ''}
               onChange={handleTitleChange}
               placeholder="عنوان دوره"
               className={inputClass}
@@ -232,10 +231,10 @@ export default function PanelAdminCourseEdit() {
             <input
               type="text"
               dir="ltr"
-              value={form.slug}
+              value={watched.slug || ''}
               onChange={(e) => {
                 setSlugTouched(true);
-                setForm((prev) => ({ ...prev, slug: e.target.value }));
+                setValue('slug', e.target.value, { shouldValidate: true });
               }}
               placeholder="course-slug"
               className={inputClass}
@@ -245,10 +244,7 @@ export default function PanelAdminCourseEdit() {
         <Field label="توضیحات" required className="mt-20">
           <textarea
             rows={5}
-            value={form.description}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, description: e.target.value }))
-            }
+            {...register('description')}
             placeholder="توضیحات کامل دوره، سرفصل‌ها، مخاطب هدف..."
             className={`${inputClass} resize-none`}
           />
@@ -266,17 +262,14 @@ export default function PanelAdminCourseEdit() {
           <Field label="سطح دوره" required>
             <FilterSelect
               options={levelOptions}
-              value={form.level}
-              onChange={(v) => setForm((prev) => ({ ...prev, level: v }))}
+              value={watched.level || 'advanced'}
+              onChange={(v) => setValue('level', v)}
             />
           </Field>
           <Field label="مدت زمان">
             <input
               type="text"
-              value={form.duration}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, duration: e.target.value }))
-              }
+              {...register('duration')}
               placeholder="مثلاً ۲۸ ساعت"
               className={inputClass}
             />
@@ -284,8 +277,8 @@ export default function PanelAdminCourseEdit() {
           <Field label="وضعیت">
             <FilterSelect
               options={statusOptions}
-              value={form.status}
-              onChange={(v) => setForm((prev) => ({ ...prev, status: v }))}
+              value={watched.status || 'published'}
+              onChange={(v) => setValue('status', v)}
             />
           </Field>
         </div>
@@ -293,10 +286,7 @@ export default function PanelAdminCourseEdit() {
           <Field label="قیمت (تومان)" required>
             <input
               type="number"
-              value={form.price}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, price: e.target.value }))
-              }
+              {...register('price')}
               placeholder="۱۲۰۰۰۰۰"
               className={inputClass}
             />
@@ -307,13 +297,7 @@ export default function PanelAdminCourseEdit() {
           >
             <input
               type="number"
-              value={form.discount_price}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  discount_price: e.target.value,
-                }))
-              }
+              {...register('discount_price')}
               placeholder="۹۸۰۰۰۰"
               className={inputClass}
             />
@@ -323,15 +307,15 @@ export default function PanelAdminCourseEdit() {
           <Field label="دسته‌بندی">
             <FilterSelect
               options={categoryOptions}
-              value={form.category_id}
-              onChange={(v) => setForm((prev) => ({ ...prev, category_id: v }))}
+              value={watched.category_id || '2'}
+              onChange={(v) => setValue('category_id', v)}
             />
           </Field>
           <Field label="مدرس">
             <FilterSelect
               options={teacherOptions}
-              value={form.teacher_id}
-              onChange={(v) => setForm((prev) => ({ ...prev, teacher_id: v }))}
+              value={watched.teacher_id || '2'}
+              onChange={(v) => setValue('teacher_id', v)}
             />
           </Field>
         </div>
@@ -358,10 +342,7 @@ export default function PanelAdminCourseEdit() {
               accept="image/*"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) {
-                  setCoverImgName(f.name);
-                  setForm((prev) => ({ ...prev, cover_img: f }));
-                }
+                if (f) setCoverImgName(f.name);
               }}
             />
           </Field>
@@ -378,24 +359,21 @@ export default function PanelAdminCourseEdit() {
               accept="video/*"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) {
-                  setCoverVideoName(f.name);
-                  setForm((prev) => ({ ...prev, cover_video: f }));
-                }
+                if (f) setCoverVideoName(f.name);
               }}
             />
           </Field>
         </div>
         <div className="mt-20 grid grid-cols-1 gap-20 md:grid-cols-2">
           <ToggleSwitch
-            checked={form.has_support}
-            onChange={(v) => setForm((prev) => ({ ...prev, has_support: v }))}
+            checked={Boolean(watched.has_support)}
+            onChange={(v) => setValue('has_support', v)}
             label="پشتیبانی دارد"
             description="امکان ارسال تیکت برای دانشجویان"
           />
           <ToggleSwitch
-            checked={form.is_active}
-            onChange={(v) => setForm((prev) => ({ ...prev, is_active: v }))}
+            checked={Boolean(watched.is_active)}
+            onChange={(v) => setValue('is_active', v)}
             label="دوره فعال باشد"
             description="در صورت غیرفعال بودن نمایش داده نمی‌شود"
           />
@@ -418,7 +396,7 @@ export default function PanelAdminCourseEdit() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                addChapter();
+                handleAddChapter();
               }
             }}
             placeholder={`عنوان فصل ${chapters.length + 1}...`}
@@ -426,8 +404,8 @@ export default function PanelAdminCourseEdit() {
           />
           <button
             type="button"
-            onClick={addChapter}
-            disabled={!newChapterTitle.trim()}
+            onClick={handleAddChapter}
+            disabled={!newChapterTitle.trim() || addChapterMutation.isPending}
             className={`to-primary-600 inline-flex items-center justify-center gap-8 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-10 text-[11px] font-black whitespace-nowrap text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 hover:brightness-110 ${!newChapterTitle.trim() ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
           >
             <svg
@@ -468,12 +446,6 @@ export default function PanelAdminCourseEdit() {
           انصراف
         </Link>
         <button
-          type="button"
-          className="cursor-pointer rounded-xl bg-[#EDF1F8] px-20 py-12 text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A]"
-        >
-          ذخیره پیش‌نویس
-        </button>
-        <button
           type="submit"
           disabled={!canSubmit}
           className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${canSubmit ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50'}`}
@@ -484,3 +456,5 @@ export default function PanelAdminCourseEdit() {
     </form>
   );
 }
+
+export default PanelAdminCourseEdit;

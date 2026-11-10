@@ -3,8 +3,10 @@ import { useState } from 'react';
 import AccordionItem from './AccordionItem';
 
 export default function CurriculumTab({ course }) {
-  const curriculum = course.curriculum;
-  const [openIds, setOpenIds] = useState([curriculum[0]?.id]);
+  const curriculum = course?.curriculum || [];
+  const [openIds, setOpenIds] = useState(() =>
+    curriculum[0]?.id ? [curriculum[0].id] : [],
+  );
 
   const toggle = (id) =>
     setOpenIds((prev) =>
@@ -22,14 +24,20 @@ export default function CurriculumTab({ course }) {
         </p>
       </div>
 
-      {curriculum.map((section) => (
-        <AccordionItem
-          key={section.id}
-          item={section}
-          isOpen={openIds.includes(section.id)}
-          onToggle={() => toggle(section.id)}
-        />
-      ))}
+      {curriculum.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[#E4E4F7] p-24 text-center text-xs text-[#64748B]">
+          سرفصل‌های این دوره به‌زودی منتشر خواهند شد.
+        </div>
+      ) : (
+        curriculum.map((section) => (
+          <AccordionItem
+            key={section.id}
+            item={section}
+            isOpen={openIds.includes(section.id)}
+            onToggle={() => toggle(section.id)}
+          />
+        ))
+      )}
     </div>
   );
 }

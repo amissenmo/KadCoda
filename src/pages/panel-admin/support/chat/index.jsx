@@ -1,85 +1,223 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 
+import Spinner from '../../../../components/ui/Spinner';
+import {
+  getAdminTickets,
+  getTicketMessages,
+  replyTicket,
+  updateTicketStatus,
+} from '../../../../services/supportApi';
 import InfoChip from './InfoChip.jsx';
 import MessageBubble from './MessageBubble';
-
-const mockTicket = {
-  id: 'TK-1042',
-  subject: 'مشکل در پخش ویدیوی جلسه ۷',
-  student: {
-    name: 'رضا کریمی',
-    email: 'reza.karimi@example.com',
-    avatar: 'ر',
-  },
-  department: 'فنی و پشتیبانی',
-  departmentClass: 'bg-[#DCE5F4] text-[#193B73]',
-  priority: 'بالا',
-  status: 'در حال بررسی',
-  statusClass: 'bg-[#FFF3DC] text-[#B07D00]',
-  createdAt: '۱۴۰۳/۰۵/۱۲ · ۱۴:۳۲',
-  lastUpdate: '۱۴۰۳/۰۵/۱۲ · ۱۶:۱۰',
-  messages: [
-    {
-      id: 1,
-      sender: 'student',
-      name: 'رضا کریمی',
-      avatar: 'ر',
-      time: '۱۴۰۳/۰۵/۱۲ · ۱۴:۳۲',
-      text: 'سلام، من دوره React پیشرفته رو خریدم ولی وقتی می‌خوام ویدیوی جلسه ۷ رو پخش کنم، صفحه سفید می‌شه و هیچی نشون نمی‌ده. مرورگرم کروم آخره. ممنون می‌شم راهنمایی کنید.',
-      attachments: [],
-    },
-    {
-      id: 2,
-      sender: 'support',
-      name: 'پشتیبانی کدکدا',
-      avatar: 'ک',
-      time: '۱۴۰۳/۰۵/۱۲ · ۱۵:۰۵',
-      text: 'سلام رضا جان، وقت بخیر 🌱 ممنون که گزارش دادی. لطفاً یه بار Cache مرورگر رو پاک کن و مجدد امتحان کن. اگه بازم مشکل بود، یه اسکرین‌شات از کنسول مرورگر (F12) بفرست تا دقیق‌تر بررسی کنیم.',
-      attachments: [],
-    },
-    {
-      id: 3,
-      sender: 'student',
-      name: 'رضا کریمی',
-      avatar: 'ر',
-      time: '۱۴۰۳/۰۵/۱۲ · ۱۵:۴۸',
-      text: 'Cache رو پاک کردم ولی بازم همون مشکل رو دارم. این اسکرین‌شات خطای کنسوله:',
-      attachments: [{ id: 1, name: 'console-error.png', type: 'image' }],
-    },
-    {
-      id: 4,
-      sender: 'support',
-      name: 'پشتیبانی کدکدا',
-      avatar: 'ک',
-      time: '۱۴۰۳/۰۵/۱۲ · ۱۶:۱۰',
-      text: 'ممنون از اسکرین‌شات. خطا مربوط به CORS ویدیو هست. تیم فنی رو مطلع کردم و ان‌شاءالله تا پایان امروز درست می‌شه. در این فاصله می‌تونی از نسخه دانلودی جلسه استفاده کنی. اگه تا فردا حل نشده بود، همین‌جا پیام بده.',
-      attachments: [],
-    },
-  ],
-};
 
 const inputClass =
   'w-full resize-none rounded-xl bg-[#E4E9F2] px-14 py-12 text-[11px] leading-relaxed text-[#1C2B4A] placeholder-[#8A96B0] shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666] outline-none transition';
 
-export default function PanelAdminTicketDetail() {
-  const ticket = mockTicket;
+const mapStatusCodeToLabel = (status) => {
+  if (status === 'closed' || status === 'بسته شده') return 'بسته شده';
+  if (status === 'answered' || status === 'در حال بررسی') return 'در حال بررسی';
+  return 'باز';
+};
+
+const mapLabelToStatusCode = (label) => {
+  if (label === 'بسته شده' || label === 'closed') return 'closed';
+  if (label === 'در حال بررسی' || label === 'answered') return 'answered';
+  return 'open';
+};
+
+function PanelAdminTicketDetail() {
+  const [searchParams] = useSearchParams();
+  const ticketIdParam = searchParams.get('id');
+  const queryClient = useQueryClient();
+
+  const { data: adminTickets, isLoading: listLoading } = useQuery({
+    queryKey: ['admin-tickets'],
+    queryFn: () => getAdminTickets(),
+  });
+
+  const rawTickets = Array.isArray(adminTickets)
+    ? adminTickets
+    : Array.isArray(adminTickets?.data)
+      ? adminTickets.data
+      : Array.isArray(adminTickets?.tickets)
+        ? adminTickets.tickets
+        : [];
+
+  const matchedTicket =
+    rawTickets.find((t) => String(t.id) === String(ticketIdParam)) ||
+    rawTickets[0] ||
+    {};
+
+  const activeTicketId = ticketIdParam || matchedTicket.id;
+
+  const { data: ticketMessagesData, isLoading: messagesLoading } = useQuery({
+    queryKey: ['ticket-messages', activeTicketId],
+    queryFn: () => getTicketMessages(activeTicketId),
+    enabled: Boolean(activeTicketId),
+  });
+
+  const ticketObj =
+    ticketMessagesData?.ticket || ticketMessagesData || matchedTicket || {};
+
+  const rawMessages = Array.isArray(ticketMessagesData)
+    ? ticketMessagesData
+    : Array.isArray(ticketMessagesData?.messages)
+      ? ticketMessagesData.messages
+      : Array.isArray(ticketObj?.messages)
+        ? ticketObj.messages
+        : [];
+
+  const studentFullName = ticketObj.user
+    ? `${ticketObj.user.first_name || ''} ${ticketObj.user.last_name || ''}`.trim() ||
+      ticketObj.user.mobile
+    : matchedTicket.user
+      ? `${matchedTicket.user.first_name || ''} ${matchedTicket.user.last_name || ''}`.trim() ||
+        matchedTicket.user.mobile
+      : 'دانشجوی کدکدا';
+
+  const studentEmail =
+    ticketObj.user?.email ||
+    matchedTicket.user?.email ||
+    ticketObj.user?.mobile ||
+    'student@kadcoda.ir';
+
+  const mappedMessages = rawMessages.map((msg, idx) => {
+    const senderRole = msg.sender?.role || msg.sender_role || '';
+    const isSupport =
+      senderRole === 'admin' ||
+      senderRole === 'support' ||
+      msg.sender === 'support';
+    const senderName = msg.sender
+      ? `${msg.sender.first_name || ''} ${msg.sender.last_name || ''}`.trim() ||
+        (isSupport ? 'پشتیبانی کدکدا' : studentFullName)
+      : isSupport
+        ? 'پشتیبانی کدکدا'
+        : studentFullName;
+
+    return {
+      id: msg.id || idx + 1,
+      sender: isSupport ? 'support' : 'student',
+      name: senderName,
+      avatar: senderName.charAt(0) || 'ک',
+      time: msg.created_at
+        ? new Date(msg.created_at).toLocaleDateString('fa-IR')
+        : msg.time || '۱۴۰۳/۰۵/۱۲',
+      text: msg.message || msg.text || '',
+      attachments: Array.isArray(msg.attachments)
+        ? msg.attachments.map((att, attIdx) =>
+            typeof att === 'string'
+              ? { id: attIdx + 1, name: att, type: 'file' }
+              : att,
+          )
+        : [],
+    };
+  });
+
+  const currentStatusLabel = mapStatusCodeToLabel(
+    ticketObj.status || matchedTicket.status || 'open',
+  );
+
+  const ticket = {
+    id: ticketObj.tracking_code || matchedTicket.tracking_code || 'TK-1042',
+    subject:
+      ticketObj.title ||
+      matchedTicket.title ||
+      ticketObj.subject ||
+      'گفتگوی پشتیبانی',
+    student: {
+      name: studentFullName,
+      email: studentEmail,
+      avatar: studentFullName.charAt(0) || 'د',
+    },
+    department:
+      ticketObj.department || matchedTicket.department || 'فنی و پشتیبانی',
+    departmentClass: 'bg-[#DCE5F4] text-[#193B73]',
+    priority:
+      ticketObj.priority === 'high' || matchedTicket.priority === 'high'
+        ? 'بالا'
+        : 'متوسط',
+    status: currentStatusLabel,
+    statusClass:
+      currentStatusLabel === 'بسته شده'
+        ? 'bg-[#ECEFF4] text-[#8A96B0]'
+        : currentStatusLabel === 'در حال بررسی'
+          ? 'bg-[#FFF3DC] text-[#B07D00]'
+          : 'bg-[#DCFCE7] text-[#15803D]',
+    createdAt: ticketObj.created_at
+      ? new Date(ticketObj.created_at).toLocaleDateString('fa-IR')
+      : '۱۴۰۳/۰۵/۱۲',
+    lastUpdate: ticketObj.updated_at
+      ? new Date(ticketObj.updated_at).toLocaleDateString('fa-IR')
+      : '۱۴۰۳/۰۵/۱۲',
+    messages: mappedMessages,
+  };
+
   const [reply, setReply] = useState('');
-  const [status, setStatus] = useState(ticket.status);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
+  }, [mappedMessages.length]);
+
+  const replyMutation = useMutation({
+    mutationFn: (messageText) =>
+      replyTicket(activeTicketId, {
+        message: messageText,
+        attachments: [],
+      }),
+    onSuccess: () => {
+      setReply('');
+      toast.success('پاسخ شما با موفقیت ارسال شد.');
+      queryClient.invalidateQueries({
+        queryKey: ['ticket-messages', activeTicketId],
+      });
+      queryClient.invalidateQueries({ queryKey: ['admin-tickets'] });
+    },
+    onError: (err) => {
+      toast.error(err?.message || 'خطا در ارسال پاسخ.');
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (nextStatusCode) =>
+      updateTicketStatus(activeTicketId, nextStatusCode),
+    onSuccess: () => {
+      toast.success('وضعیت تیکت بروزرسانی شد.');
+      queryClient.invalidateQueries({
+        queryKey: ['ticket-messages', activeTicketId],
+      });
+      queryClient.invalidateQueries({ queryKey: ['admin-tickets'] });
+    },
+    onError: (err) => {
+      toast.error(err?.message || 'خطا در تغییر وضعیت تیکت.');
+    },
+  });
 
   const handleSend = (e) => {
     e.preventDefault();
-    if (!reply.trim()) return;
-    console.log('Reply:', reply);
-    setReply('');
+    if (!reply.trim() || !activeTicketId) return;
+    replyMutation.mutate(reply.trim());
   };
+
+  const handleStatusChange = (e) => {
+    const label = e.target.value;
+    if (!activeTicketId) return;
+    statusMutation.mutate(mapLabelToStatusCode(label));
+  };
+
+  const handleCloseTicket = () => {
+    if (!activeTicketId) return;
+    statusMutation.mutate('closed');
+  };
+
+  if (listLoading || messagesLoading) {
+    return <Spinner />;
+  }
 
   return (
     <>
@@ -119,7 +257,7 @@ export default function PanelAdminTicketDetail() {
                 <span
                   className={`rounded-full px-12 py-4 text-[10px] font-bold ${ticket.statusClass}`}
                 >
-                  {status}
+                  {ticket.status}
                 </span>
                 <span
                   className={`rounded-full px-12 py-4 text-[10px] font-bold ${ticket.departmentClass}`}
@@ -173,8 +311,9 @@ export default function PanelAdminTicketDetail() {
         </InfoChip>
         <InfoChip label="وضعیت تیکت">
           <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            value={ticket.status}
+            onChange={handleStatusChange}
+            disabled={statusMutation.isPending}
             className="w-full cursor-pointer rounded-xl bg-[#E4E9F2] px-10 py-8 text-[11px] font-bold text-[#1C2B4A] shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666] outline-none"
           >
             <option value="باز">باز</option>
@@ -199,6 +338,11 @@ export default function PanelAdminTicketDetail() {
           {ticket.messages.map((msg, i) => (
             <MessageBubble key={msg.id} message={msg} index={i} />
           ))}
+          {ticket.messages.length === 0 && (
+            <p className="py-12 text-center text-xs font-bold text-[#8A96B0]">
+              هنوز پیامی در این تیکت ثبت نشده است.
+            </p>
+          )}
           <div ref={chatEndRef} />
         </div>
       </motion.div>
@@ -253,15 +397,19 @@ export default function PanelAdminTicketDetail() {
           <div className="flex items-center gap-10">
             <button
               type="button"
-              className="cursor-pointer rounded-xl bg-[#EDF1F8] px-20 py-12 text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A]"
+              onClick={handleCloseTicket}
+              disabled={
+                statusMutation.isPending || ticket.status === 'بسته شده'
+              }
+              className="cursor-pointer rounded-xl bg-[#EDF1F8] px-20 py-12 text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A] disabled:cursor-not-allowed disabled:opacity-50"
             >
               بستن تیکت
             </button>
             <button
               type="submit"
-              disabled={!reply.trim()}
+              disabled={!reply.trim() || replyMutation.isPending}
               className={`to-primary-600 inline-flex items-center gap-8 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black whitespace-nowrap text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 hover:brightness-110 ${
-                !reply.trim()
+                !reply.trim() || replyMutation.isPending
                   ? 'cursor-not-allowed opacity-50'
                   : 'cursor-pointer'
               }`}
@@ -280,7 +428,7 @@ export default function PanelAdminTicketDetail() {
                   d="M6 12 3.269 3.126A59.768 59.768 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L5.999 12Zm0 0h7.5"
                 />
               </svg>
-              ارسال پاسخ
+              {replyMutation.isPending ? 'در حال ارسال...' : 'ارسال پاسخ'}
             </button>
           </div>
         </div>
@@ -288,3 +436,5 @@ export default function PanelAdminTicketDetail() {
     </>
   );
 }
+
+export default PanelAdminTicketDetail;

@@ -48,11 +48,11 @@ const CheckIcon = () => (
 );
 
 export default function LicenseTab({ course }) {
-  const isPurchased = course.isPurchased;
+  const isPurchased = Boolean(course?.isPurchased || course?.is_purchased);
 
   const [copied, setCopied] = useState(false);
 
-  const licenseKey = course?.licenseKey ?? '';
+  const licenseKey = course?.license_key || course?.licenseKey || '';
 
   const handleCopy = async () => {
     try {

@@ -1,46 +1,87 @@
+/* eslint-disable react-refresh/only-export-components */
+import { lazy, Suspense } from 'react';
+
 import { createBrowserRouter } from 'react-router';
 
+import { AdminRoute, ProtectedRoute } from '../components/common/RouteGuards';
 import RootLayout from '../components/layouts/RootLayout';
-import About from '../pages/about';
-import Archive from '../pages/archive';
-import ArchiveArticles from '../pages/archive-articles';
-import ArchiveOnline from '../pages/archiveOnline';
-import Collab from '../pages/collab';
-import Contact from '../pages/contact';
-import DetailCourse from '../pages/detail';
-import ArticlePage from '../pages/detail-article';
-import ForgotPasswordPage from '../pages/forgot-password';
-import HomePage from '../pages/homepage';
-import LoginPage from '../pages/login';
-import NotFound from '../pages/not-found/NotFound';
-import PanelLayout from '../pages/panel';
-import PanelDashboard from '../pages/panel/dashboard';
-import PanelCertificates from '../pages/panel/myCertificates';
-import PanelCourses from '../pages/panel/myCourses';
-import PanelProfile from '../pages/panel/profile';
-import PanelProfileInfo from '../pages/panel/profile/PanelProfileInfo';
-import PanelProfileNotification from '../pages/panel/profile/PanelProfileNotification';
-import PanelProfileSecurity from '../pages/panel/profile/PanelProfileSecurity';
-import PanelSupport from '../pages/panel/support';
-import PanelAdminLayout from '../pages/panel-admin';
-import PanelAdminArticles from '../pages/panel-admin/articles';
-import PanelAdminArticleEdit from '../pages/panel-admin/articles/edit';
-import PanelAdminArticleCreate from '../pages/panel-admin/articles/new';
-import PanelAdminCourses from '../pages/panel-admin/courses';
-import PanelAdminCourseEdit from '../pages/panel-admin/courses/edit';
-import PanelAdminCourseCreate from '../pages/panel-admin/courses/new';
-import PanelAdminDashboard from '../pages/panel-admin/dashboard';
-import PanelAdminFinance from '../pages/panel-admin/finance';
-import PanelAdminDiscountCreate from '../pages/panel-admin/finance/discount';
-import PanelAdminSupport from '../pages/panel-admin/support';
-import PanelAdminTicketDetail from '../pages/panel-admin/support/chat';
-import PanelAdminUsers from '../pages/panel-admin/users';
-import PanelAdminUserEdit from '../pages/panel-admin/users/edit';
-import RegisterPage from '../pages/signup';
+import Spinner from '../components/ui/Spinner';
+
+const About = lazy(() => import('../pages/about'));
+const Archive = lazy(() => import('../pages/archive'));
+const ArchiveArticles = lazy(() => import('../pages/archive-articles'));
+const ArchiveOnline = lazy(() => import('../pages/archiveOnline'));
+const Collab = lazy(() => import('../pages/collab'));
+const Contact = lazy(() => import('../pages/contact'));
+const DetailCourse = lazy(() => import('../pages/detail'));
+const ArticlePage = lazy(() => import('../pages/detail-article'));
+const ForgotPasswordPage = lazy(() => import('../pages/forgot-password'));
+const HomePage = lazy(() => import('../pages/homepage'));
+const LoginPage = lazy(() => import('../pages/login'));
+const NotFound = lazy(() => import('../pages/not-found/NotFound'));
+const PanelLayout = lazy(() => import('../pages/panel'));
+const PanelDashboard = lazy(() => import('../pages/panel/dashboard'));
+const PanelCertificates = lazy(() => import('../pages/panel/myCertificates'));
+const PanelCourses = lazy(() => import('../pages/panel/myCourses'));
+const PanelProfile = lazy(() => import('../pages/panel/profile'));
+const PanelProfileInfo = lazy(
+  () => import('../pages/panel/profile/PanelProfileInfo'),
+);
+const PanelProfileNotification = lazy(
+  () => import('../pages/panel/profile/PanelProfileNotification'),
+);
+const PanelProfileSecurity = lazy(
+  () => import('../pages/panel/profile/PanelProfileSecurity'),
+);
+const PanelSupport = lazy(() => import('../pages/panel/support'));
+const PanelAdminLayout = lazy(() => import('../pages/panel-admin'));
+const PanelAdminArticles = lazy(() => import('../pages/panel-admin/articles'));
+const PanelAdminArticleEdit = lazy(
+  () => import('../pages/panel-admin/articles/edit'),
+);
+const PanelAdminArticleCreate = lazy(
+  () => import('../pages/panel-admin/articles/new'),
+);
+const PanelAdminCourses = lazy(() => import('../pages/panel-admin/courses'));
+const PanelAdminCourseEdit = lazy(
+  () => import('../pages/panel-admin/courses/edit'),
+);
+const PanelAdminCourseCreate = lazy(
+  () => import('../pages/panel-admin/courses/new'),
+);
+const PanelAdminDashboard = lazy(
+  () => import('../pages/panel-admin/dashboard'),
+);
+const PanelAdminFinance = lazy(() => import('../pages/panel-admin/finance'));
+const PanelAdminDiscountCreate = lazy(
+  () => import('../pages/panel-admin/finance/discount'),
+);
+const FinancialReport = lazy(
+  () => import('../pages/panel-admin/reports/FinancialReport'),
+);
+const PanelAdminSupport = lazy(() => import('../pages/panel-admin/support'));
+const PanelAdminTicketDetail = lazy(
+  () => import('../pages/panel-admin/support/chat'),
+);
+const PanelAdminUsers = lazy(() => import('../pages/panel-admin/users'));
+const PanelAdminUserEdit = lazy(
+  () => import('../pages/panel-admin/users/edit'),
+);
+const RegisterPage = lazy(() => import('../pages/signup'));
+
+const PageLoader = () => (
+  <div className="flex h-screen w-full items-center justify-center bg-[#E8EDF5]">
+    <Spinner className="text-primary-600 h-40 w-40" />
+  </div>
+);
 
 const router = createBrowserRouter([
   {
-    element: <RootLayout />,
+    element: (
+      <Suspense fallback={<PageLoader />}>
+        <RootLayout />
+      </Suspense>
+    ),
     children: [
       {
         path: '/',
@@ -97,7 +138,11 @@ const router = createBrowserRouter([
 
           {
             path: 'panel',
-            element: <PanelLayout />,
+            element: (
+              <ProtectedRoute>
+                <PanelLayout />
+              </ProtectedRoute>
+            ),
             children: [
               {
                 index: true,
@@ -143,7 +188,11 @@ const router = createBrowserRouter([
           },
           {
             path: 'panel-admin',
-            element: <PanelAdminLayout />,
+            element: (
+              <AdminRoute>
+                <PanelAdminLayout />
+              </AdminRoute>
+            ),
             children: [
               {
                 index: true,
@@ -166,6 +215,11 @@ const router = createBrowserRouter([
               {
                 path: 'finance',
                 element: <PanelAdminFinance />,
+              },
+
+              {
+                path: 'reports/finance',
+                element: <FinancialReport />,
               },
 
               {

@@ -1,13 +1,19 @@
 import { useState } from 'react';
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router';
+import { useForm, useWatch } from 'react-hook-form';
+import { Link, useNavigate } from 'react-router';
+import { toast } from 'sonner';
 
 import Field from '../../../../components/ui/Field';
 import FileInput from '../../../../components/ui/FileInput';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import SectionHeader from '../../../../components/ui/SectionHeader';
 import ToggleSwitch from '../../../../components/ui/ToggleSwitch';
+import { createArticle } from '../../../../services/articleApi';
+import { adminArticleSchema } from '../../../../validation/admin.schema';
 
 const statusOptions = [
   { value: 'draft', label: 'پیش‌نویس' },
@@ -27,27 +33,38 @@ const categoryOptions = [
 const inputClass =
   'w-full rounded-xl bg-[#E4E9F2] px-12 py-10 text-[11px] text-[#1C2B4A] placeholder-[#8A96B0] shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666] outline-none transition';
 
-export default function PanelAdminArticleCreate() {
-  const [form, setForm] = useState({
-    title: '',
-    slug: '',
-    excerpt: '',
-    content: '',
-    cover: null,
-    category_id: '',
-    status: 'draft',
-    tags: '',
-    is_published: true,
-  });
+function PanelAdminArticleCreate() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [slugTouched, setSlugTouched] = useState(false);
   const [coverName, setCoverName] = useState('');
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    setValue,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(adminArticleSchema),
+    defaultValues: {
+      title: '',
+      slug: '',
+      excerpt: '',
+      content: '',
+      category_id: 'frontend',
+      status: 'published',
+      tags: '',
+      is_published: true,
+    },
+  });
+
+  const watched = useWatch({ control });
+
   const canSubmit =
-    form.title.trim() !== '' &&
-    form.slug.trim() !== '' &&
-    form.excerpt.trim() !== '' &&
-    form.content.trim() !== '' &&
-    form.category_id !== '';
+    (watched.title || '').trim() !== '' &&
+    (watched.slug || '').trim() !== '' &&
+    (watched.content || '').trim() !== '';
 
   const slugify = (text) =>
     text
@@ -58,21 +75,44 @@ export default function PanelAdminArticleCreate() {
 
   const handleTitleChange = (e) => {
     const title = e.target.value;
-    setForm((prev) => ({
-      ...prev,
-      title,
-      slug: slugTouched ? prev.slug : slugify(title),
-    }));
+    setValue('title', title, { shouldValidate: true });
+    if (!slugTouched) {
+      setValue('slug', slugify(title), { shouldValidate: true });
+    }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    console.log('Article payload:', form);
+  const createMutation = useMutation({
+    mutationFn: (data) => {
+      const parsedTags = (data.tags || '')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+      if (data.category_id && !parsedTags.includes(data.category_id)) {
+        parsedTags.unshift(data.category_id);
+      }
+      return createArticle({
+        title: data.title,
+        slug: data.slug,
+        content_markdown: data.content,
+        tags: parsedTags,
+      });
+    },
+    onSuccess: () => {
+      toast.success('مقاله با موفقیت منتشر شد.');
+      queryClient.invalidateQueries({ queryKey: ['articles'] });
+      navigate('/panel-admin/articles');
+    },
+    onError: (err) => {
+      toast.error(err?.message || 'خطا در انتشار مقاله.');
+    },
+  });
+
+  const onSubmit = (data) => {
+    createMutation.mutate(data);
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit(onSubmit)}>
       <motion.div
         initial={{ opacity: 0, x: -40 }}
         animate={{ opacity: 1, x: 0 }}
@@ -98,11 +138,16 @@ export default function PanelAdminArticleCreate() {
           <Field label="عنوان مقاله" required>
             <input
               type="text"
-              value={form.title}
+              value={watched.title || ''}
               onChange={handleTitleChange}
               placeholder="مثلاً ۱۰ تکنیک حرفه‌ای برای بهینه‌سازی React"
               className={inputClass}
             />
+            {errors.title && (
+              <span className="text-[10px] font-bold text-red-500">
+                {errors.title.message}
+              </span>
+            )}
           </Field>
           <Field
             label="اسلاگ (Slug)"
@@ -112,28 +157,29 @@ export default function PanelAdminArticleCreate() {
             <input
               type="text"
               dir="ltr"
-              value={form.slug}
+              value={watched.slug || ''}
               onChange={(e) => {
                 setSlugTouched(true);
-                setForm((prev) => ({ ...prev, slug: e.target.value }));
+                setValue('slug', e.target.value, { shouldValidate: true });
               }}
               placeholder="react-optimization-techniques"
               className={inputClass}
             />
+            {errors.slug && (
+              <span className="text-[10px] font-bold text-red-500">
+                {errors.slug.message}
+              </span>
+            )}
           </Field>
         </div>
         <Field
           label="خلاصه مقاله"
-          required
           className="mt-20"
           hint="حداکثر ۲ خط، در کارت مقاله نمایش داده می‌شود"
         >
           <textarea
             rows={3}
-            value={form.excerpt}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, excerpt: e.target.value }))
-            }
+            {...register('excerpt')}
             placeholder="خلاصه‌ای کوتاه از محتوای مقاله..."
             className={`${inputClass} resize-none`}
           />
@@ -154,13 +200,15 @@ export default function PanelAdminArticleCreate() {
         >
           <textarea
             rows={14}
-            value={form.content}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, content: e.target.value }))
-            }
+            {...register('content')}
             placeholder="متن کامل مقاله را اینجا بنویسید..."
             className={`${inputClass} resize-y`}
           />
+          {errors.content && (
+            <span className="text-[10px] font-bold text-red-500">
+              {errors.content.message}
+            </span>
+          )}
         </Field>
       </motion.div>
 
@@ -178,17 +226,15 @@ export default function PanelAdminArticleCreate() {
               accept="image/*"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) {
-                  setCoverName(f.name);
-                  setForm((prev) => ({ ...prev, cover: f }));
-                }
+                if (f) setCoverName(f.name);
               }}
             />
           </Field>
-          <Field label="دسته‌بندی" required>
+          <Field label="دسته‌بندی">
             <FilterSelect
               options={categoryOptions}
-              onChange={(v) => setForm((prev) => ({ ...prev, category_id: v }))}
+              value={watched.category_id || 'frontend'}
+              onChange={(v) => setValue('category_id', v)}
             />
           </Field>
         </div>
@@ -197,16 +243,14 @@ export default function PanelAdminArticleCreate() {
           <Field label="وضعیت انتشار">
             <FilterSelect
               options={statusOptions}
-              onChange={(v) => setForm((prev) => ({ ...prev, status: v }))}
+              value={watched.status || 'published'}
+              onChange={(v) => setValue('status', v)}
             />
           </Field>
           <Field label="برچسب‌ها" hint="با کاما جدا کنید">
             <input
               type="text"
-              value={form.tags}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, tags: e.target.value }))
-              }
+              {...register('tags')}
               placeholder="react, performance, frontend"
               className={inputClass}
             />
@@ -215,8 +259,8 @@ export default function PanelAdminArticleCreate() {
 
         <div className="mt-20">
           <ToggleSwitch
-            checked={form.is_published}
-            onChange={(v) => setForm((prev) => ({ ...prev, is_published: v }))}
+            checked={Boolean(watched.is_published)}
+            onChange={(v) => setValue('is_published', v)}
             label="مقاله منتشر شود"
             description="در صورت خاموش بودن به‌عنوان پیش‌نویس ذخیره می‌شود"
           />
@@ -225,25 +269,21 @@ export default function PanelAdminArticleCreate() {
 
       <div className="mt-20 flex flex-col-reverse gap-12 sm:flex-row sm:justify-end">
         <Link
-          to="/panel/admin/articles"
+          to="/panel-admin/articles"
           className="rounded-xl bg-[#EDF1F8] px-20 py-12 text-center text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A]"
         >
           انصراف
         </Link>
         <button
-          type="button"
-          className="cursor-pointer rounded-xl bg-[#EDF1F8] px-20 py-12 text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A]"
-        >
-          ذخیره پیش‌نویس
-        </button>
-        <button
           type="submit"
-          disabled={!canSubmit}
-          className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${canSubmit ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50'}`}
+          disabled={!canSubmit || createMutation.isPending}
+          className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${canSubmit && !createMutation.isPending ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50'}`}
         >
-          انتشار مقاله
+          {createMutation.isPending ? 'در حال انتشار...' : 'انتشار مقاله'}
         </button>
       </div>
     </form>
   );
 }
+
+export default PanelAdminArticleCreate;

@@ -1,11 +1,31 @@
 import { useState } from 'react';
 
-import { Outlet } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
+import { Outlet, useNavigate } from 'react-router';
 
+import { useAuth } from '../../contexts/AuthContext';
+import { getDashboardStats } from '../../services/studentApi';
 import PanelNavItem from './PanelNavItem';
 
-export default function PanelLayout() {
+function PanelLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const { data: stats } = useQuery({
+    queryKey: ['student-dashboard-stats'],
+    queryFn: getDashboardStats,
+  });
+
+  const displayName = user?.full_name || 'دانشجوی کدکدا';
+  const userInitial = displayName.trim().charAt(0) || 'ک';
+  const activeTickets = stats?.active_tickets_count ?? 0;
+
+  const handleLogout = async () => {
+    setIsSidebarOpen(false);
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <section className="min-h-screen w-full bg-[#E8EDF5] pb-100">
@@ -45,7 +65,7 @@ export default function PanelLayout() {
             <div className="flex items-center justify-center gap-8 rounded-xl px-10 py-6 shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673]">
               <div>
                 <span className="text-xs font-bold text-[#1C2B4A]">
-                  رضا کریمی
+                  {displayName}
                 </span>
                 <div className="flex items-center justify-end gap-4">
                   <span className="text-[10px] text-[#8A96B0]">آنلاین</span>
@@ -53,15 +73,21 @@ export default function PanelLayout() {
                 </div>
               </div>
               <span className="to-primary-600 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#1E4D9C] text-xs text-white">
-                ر
+                {userInitial}
               </span>
             </div>
 
-            <button className="relative flex h-36 w-36 cursor-pointer items-center justify-center rounded-xl shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673]">
+            <button
+              type="button"
+              onClick={() => navigate('/panel/support')}
+              className="relative flex h-36 w-36 cursor-pointer items-center justify-center rounded-xl shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673]"
+            >
               <img src="/icons/alert.svg" alt="alert" />
-              <span className="bg-secondary-300 text-primary-600 absolute -top-5 -right-5 flex h-16 w-16 items-center justify-center rounded-full text-xs font-bold shadow-[0px_2px_6px_0px_#F7B92880]">
-                2
-              </span>
+              {activeTickets > 0 && (
+                <span className="bg-secondary-300 text-primary-600 absolute -top-5 -right-5 flex h-16 w-16 items-center justify-center rounded-full text-xs font-bold shadow-[0px_2px_6px_0px_#F7B92880]">
+                  {activeTickets}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -94,11 +120,11 @@ export default function PanelLayout() {
           <div className="border-b border-b-[#A3B1C640] p-12">
             <div className="flex items-center gap-10 rounded-xl px-8 py-10 shadow-[inset_-2px_-2px_4px_0px_#FFFFFFD9,_inset_2px_2px_5px_0px_#A3B1C666]">
               <span className="to-primary-600 flex h-36 w-36 items-center justify-center rounded-xl bg-gradient-to-br from-[#1E4D9C] text-sm font-black text-white shadow-[3px_3px_8px_0px_#193B734D]">
-                ر
+                {userInitial}
               </span>
               <div>
                 <span className="text-xs font-bold text-[#1C2B4A]">
-                  رضا کریمی
+                  {displayName}
                 </span>
                 <div className="flex items-center justify-end gap-4">
                   <span className="text-[10px] text-[#8A96B0]">آنلاین</span>
@@ -141,7 +167,7 @@ export default function PanelLayout() {
               label="پشتیبانی"
               icon="/icons/support.svg"
               iconActive="/icons/support-active.svg"
-              badge={2}
+              badge={activeTickets > 0 ? activeTickets : undefined}
             />
 
             <PanelNavItem
@@ -155,12 +181,13 @@ export default function PanelLayout() {
 
           <div className="mt-auto flex flex-col gap-10 px-12">
             <div className="mt-auto border-t border-t-[#A3B1C640] py-10">
-              <button className="flex w-full items-center gap-10 rounded-xl px-12 py-10 text-xs font-bold">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex w-full cursor-pointer items-center gap-10 rounded-xl px-12 py-10 text-xs font-bold transition hover:bg-[#DCE5F4]/50"
+              >
                 <img src="/icons/logout.svg" alt="logout" />
-                <span
-                  className="text-xs font-bold text-[#B0BAC9]"
-                  onClick={() => setIsSidebarOpen(false)}
-                >
+                <span className="text-xs font-bold text-[#B0BAC9]">
                   خروج از حساب
                 </span>
               </button>
@@ -175,3 +202,5 @@ export default function PanelLayout() {
     </section>
   );
 }
+
+export default PanelLayout;

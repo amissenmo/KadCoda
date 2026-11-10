@@ -1,6 +1,10 @@
+import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Outlet } from 'react-router';
 
+import { useAuth } from '../../../contexts/AuthContext';
+import { enToFaDigits } from '../../../services/courseApi';
+import { getDashboardStats, getProfile } from '../../../services/studentApi';
 import PanelNavItem from '../PanelNavItem';
 
 const container = {
@@ -41,7 +45,34 @@ const textContainer = {
   },
 };
 
-export default function PanelProfile() {
+function PanelProfile() {
+  const { user } = useAuth();
+
+  const { data: profile } = useQuery({
+    queryKey: ['student-profile'],
+    queryFn: getProfile,
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ['student-dashboard-stats'],
+    queryFn: getDashboardStats,
+  });
+
+  const currentUser = profile || user;
+  const displayName = currentUser?.full_name || 'دانشجوی کدکدا';
+  const userInitial = displayName.trim().charAt(0) || 'ک';
+  const subtitle =
+    currentUser?.email ||
+    (currentUser?.mobile ? enToFaDigits(currentUser.mobile) : '');
+
+  const filledCount = [
+    currentUser?.full_name,
+    currentUser?.mobile,
+    currentUser?.email,
+    currentUser?.bio,
+  ].filter(Boolean).length;
+  const completionPercent = Math.min(100, Math.round((filledCount / 4) * 100));
+
   return (
     <>
       <motion.section
@@ -66,7 +97,9 @@ export default function PanelProfile() {
               variants={textDrop}
               className="relative flex h-80 w-80 items-center justify-center rounded-2xl border-4 border-[#FFFFFF26] bg-[#1A4598]"
             >
-              <span className="text-2xl font-black text-white">ر</span>
+              <span className="text-2xl font-black text-white">
+                {userInitial}
+              </span>
 
               <div className="bg-secondary-300 absolute -bottom-10 -left-12 flex h-28 w-28 items-center justify-center rounded-xl shadow-[2px_2px_8px_0px_#F7B92880]">
                 <img src="/icons/camera.svg" alt="camera" />
@@ -82,13 +115,13 @@ export default function PanelProfile() {
                 variants={textDrop}
                 className="text-xl font-black text-white"
               >
-                رضا کریمی
+                {displayName}
               </motion.h2>
               <motion.p
                 variants={textDrop}
                 className="pt-4 text-sm font-normal text-[#FFFFFF66]"
               >
-                reza.karimi@email.com
+                {subtitle}
               </motion.p>
             </motion.div>
           </motion.div>
@@ -104,7 +137,9 @@ export default function PanelProfile() {
                 variants={textDrop}
                 className="flex flex-col items-center justify-center rounded-xl bg-[#FFFFFF14] px-16 py-10 shadow-[inset_1px_1px_4px_0px_#00000033]"
               >
-                <p className="text-lg font-black text-white">4</p>
+                <p className="text-lg font-black text-white">
+                  {enToFaDigits(stats?.enrolled_courses_count ?? 0)}
+                </p>
                 <p className="pt-4 text-[10px] font-normal text-[#FFFFFF59]">
                   دوره
                 </p>
@@ -114,7 +149,9 @@ export default function PanelProfile() {
                 variants={textDrop}
                 className="flex flex-col items-center justify-center rounded-xl bg-[#FFFFFF14] px-16 py-10 shadow-[inset_1px_1px_4px_0px_#00000033]"
               >
-                <p className="text-lg font-black text-white">2</p>
+                <p className="text-lg font-black text-white">
+                  {enToFaDigits(stats?.certificates_count ?? 0)}
+                </p>
                 <p className="pt-4 text-[10px] font-normal text-[#FFFFFF59]">
                   گواهی
                 </p>
@@ -124,7 +161,9 @@ export default function PanelProfile() {
                 variants={textDrop}
                 className="flex flex-col items-center justify-center rounded-xl bg-[#FFFFFF14] px-16 py-10 shadow-[inset_1px_1px_4px_0px_#00000033]"
               >
-                <p className="text-lg font-black text-white">2</p>
+                <p className="text-lg font-black text-white">
+                  {enToFaDigits(stats?.active_tickets_count ?? 0)}
+                </p>
                 <p className="pt-4 text-[10px] font-normal text-[#FFFFFF59]">
                   تیکت
                 </p>
@@ -136,11 +175,14 @@ export default function PanelProfile() {
               className="flex items-center justify-end gap-6"
             >
               <div className="flex h-6 w-140 flex-row-reverse justify-self-end rounded-full bg-[#FFFFFF26] sm:w-112">
-                <div className="h-full w-[80%] rounded-full bg-[#F7B928]"></div>
+                <div
+                  style={{ width: `${completionPercent}%` }}
+                  className="h-full rounded-full bg-[#F7B928]"
+                />
               </div>
               <div>
                 <span className="text-xs font-semibold text-[#FFFFFF80]">
-                  80٪
+                  {enToFaDigits(completionPercent)}٪
                 </span>
               </div>
             </motion.div>
@@ -190,3 +232,5 @@ export default function PanelProfile() {
     </>
   );
 }
+
+export default PanelProfile;

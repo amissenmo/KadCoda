@@ -1,112 +1,93 @@
 import { useState } from 'react';
 
+import { useQuery } from '@tanstack/react-query';
+
+import Spinner from '../../../components/ui/Spinner';
+import { listDiscounts, listTransactions } from '../../../services/adminApi';
 import FinanceStats from './FinanceStats';
 import FinanceTabsSection from './FinanceTabsSection';
 
-const transactions = [
-  {
-    id: 'TRX-2042',
-    student: 'رضا کریمی',
-    course: 'دوره React پیشرفته',
-    amount: '۱,۲۰۰,۰۰۰',
-    status: 'موفق',
-    statusClass: 'bg-[#DCFCE7] text-[#15803D]',
-    date: '۱۴۰۳/۰۵/۱۲',
-  },
-  {
-    id: 'TRX-2041',
-    student: 'سارا محمدی',
-    course: 'دوره Figma مقدماتی',
-    amount: '۸۵۰,۰۰۰',
-    status: 'موفق',
-    statusClass: 'bg-[#DCFCE7] text-[#15803D]',
-    date: '۱۴۰۳/۰۵/۱۰',
-  },
-  {
-    id: 'TRX-2040',
-    student: 'مریم احمدی',
-    course: 'دوره تحلیل داده',
-    amount: '۱,۵۰۰,۰۰۰',
-    method: 'کارت به کارت',
-    status: 'در انتظار',
-    statusClass: 'bg-[#FFF3DC] text-[#B07D00]',
-    date: '۱۴۰۳/۰۵/۰۹',
-  },
-  {
-    id: 'TRX-2039',
-    student: 'زهرا نوری',
-    course: 'دوره JavaScript',
-    amount: '۹۵۰,۰۰۰',
-    status: 'ناموفق',
-    statusClass: 'bg-[#FEE2E2] text-[#B91C1C]',
-    date: '۱۴۰۳/۰۵/۰۸',
-  },
-  {
-    id: 'TRX-2038',
-    student: 'علی رضایی',
-    course: 'دوره مدیریت محصول',
-    amount: '۱,۳۰۰,۰۰۰',
-    status: 'موفق',
-    statusClass: 'bg-[#DCFCE7] text-[#15803D]',
-    date: '۱۴۰۳/۰۵/۰۷',
-  },
-  {
-    id: 'TRX-2037',
-    student: 'داود بهمنی',
-    course: 'دوره UI/UX',
-    amount: '۱,۱۰۰,۰۰۰',
-    status: 'موفق',
-    statusClass: 'bg-[#DCFCE7] text-[#15803D]',
-    date: '۱۴۰۳/۰۵/۰۵',
-  },
-];
-
-const discounts = [
-  {
-    id: 1,
-    code: 'KODKDA20',
-    percent: 20,
-    used: 34,
-    total: 100,
-    active: true,
-    startDate: '۱۴۰۳/۰۴/۰۱',
-    endDate: '۱۴۰۳/۰۶/۳۰',
-  },
-  {
-    id: 2,
-    code: 'WELCOME50',
-    percent: 50,
-    used: 78,
-    total: 80,
-    active: true,
-    startDate: '۱۴۰۳/۰۳/۱۵',
-    endDate: '۱۴۰۳/۰۵/۱۵',
-  },
-  {
-    id: 3,
-    code: 'SUMMER30',
-    percent: 30,
-    used: 12,
-    total: 200,
-    active: true,
-    startDate: '۱۴۰۳/۰۴/۱۰',
-    endDate: '۱۴۰۳/۰۷/۱۰',
-  },
-  {
-    id: 4,
-    code: 'BLACKFRIDAY',
-    percent: 60,
-    used: 150,
-    total: 150,
-    active: false,
-    startDate: '۱۴۰۲/۰۹/۲۵',
-    endDate: '۱۴۰۲/۱۰/۰۵',
-  },
-];
-
-export default function PanelAdminFinance() {
+function PanelAdminFinance() {
   const [activeTab, setActiveTab] = useState('transactions');
   const [copiedCode, setCopiedCode] = useState(null);
+
+  const { data: txData, isLoading: txLoading } = useQuery({
+    queryKey: ['admin-transactions'],
+    queryFn: () => listTransactions({ limit: 50 }),
+  });
+
+  const { data: discountData, isLoading: discountLoading } = useQuery({
+    queryKey: ['admin-discounts'],
+    queryFn: () => listDiscounts(),
+  });
+
+  const rawTransactions = Array.isArray(txData)
+    ? txData
+    : Array.isArray(txData?.data)
+      ? txData.data
+      : Array.isArray(txData?.transactions)
+        ? txData.transactions
+        : [];
+
+  const transactions = rawTransactions.map((tx, idx) => {
+    const studentName = tx.user
+      ? `${tx.user.first_name || ''} ${tx.user.last_name || ''}`.trim() ||
+        tx.user.mobile
+      : tx.student_name || tx.student || 'کاربر کدکدا';
+    const courseName =
+      tx.course?.title || tx.course_title || tx.course || 'خرید دوره';
+    const isPaid = tx.status === 'paid' || tx.status === 'موفق';
+    const isPending = tx.status === 'pending' || tx.status === 'در انتظار';
+
+    return {
+      id: tx.ref_id || tx.authority || tx.id || `TRX-${2000 + idx}`,
+      student: studentName,
+      course: courseName,
+      amount: Number(
+        tx.final_amount ?? tx.total_amount ?? tx.amount ?? 0,
+      ).toLocaleString('fa-IR'),
+      status: isPaid ? 'موفق' : isPending ? 'در انتظار' : 'ناموفق',
+      statusClass: isPaid
+        ? 'bg-[#DCFCE7] text-[#15803D]'
+        : isPending
+          ? 'bg-[#FFF3DC] text-[#B07D00]'
+          : 'bg-[#FEE2E2] text-[#B91C1C]',
+      date: tx.created_at
+        ? new Date(tx.created_at).toLocaleDateString('fa-IR')
+        : tx.date || '۱۴۰۳/۰۵/۱۲',
+    };
+  });
+
+  const rawDiscounts = Array.isArray(discountData)
+    ? discountData
+    : Array.isArray(discountData?.data)
+      ? discountData.data
+      : Array.isArray(discountData?.discounts)
+        ? discountData.discounts
+        : [];
+
+  const discounts = rawDiscounts.map((d, idx) => {
+    const startDate = d.created_at
+      ? new Date(d.created_at).toLocaleDateString('fa-IR')
+      : d.startDate || '۱۴۰۳/۰۵/۰۱';
+    const endDate = d.expires_at
+      ? new Date(d.expires_at).toLocaleDateString('fa-IR')
+      : d.endDate || '۱۴۰۳/۰۸/۰۱';
+    const isExpired = d.expires_at
+      ? new Date(d.expires_at) < new Date()
+      : false;
+
+    return {
+      id: d.id || idx + 1,
+      code: d.code || 'KODKDA',
+      percent: Number(d.percent ?? d.amount ?? 20),
+      used: Number(d.used_count ?? d.used ?? 0),
+      total: Number(d.max_uses ?? d.total ?? 100),
+      active: d.active ?? !isExpired,
+      startDate,
+      endDate,
+    };
+  });
 
   const handleCopy = (code) => {
     navigator.clipboard?.writeText(code);
@@ -114,11 +95,15 @@ export default function PanelAdminFinance() {
     setTimeout(() => setCopiedCode(null), 1500);
   };
 
+  if (txLoading || discountLoading) {
+    return <Spinner />;
+  }
+
   return (
     <>
       <FinanceStats
-        transactionsCount={transactions.length}
-        discountsCount={discounts.length}
+        transactionsCount={transactions.length.toLocaleString('fa-IR')}
+        discountsCount={discounts.length.toLocaleString('fa-IR')}
       />
 
       <FinanceTabsSection
@@ -132,3 +117,5 @@ export default function PanelAdminFinance() {
     </>
   );
 }
+
+export default PanelAdminFinance;

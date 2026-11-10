@@ -5,7 +5,9 @@ import { defineConfig } from 'vite';
 
 const viteConfig = defineConfig({
   server: {
+    host: '0.0.0.0',
     port: 3000,
+    allowedHosts: true,
   },
   plugins: [
     react(),

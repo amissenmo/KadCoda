@@ -1,6 +1,11 @@
 import { useState } from 'react';
 
-export default function PasswordInput({ value, onChange, placeholder }) {
+export default function PasswordInput({
+  value,
+  onChange,
+  placeholder,
+  ...rest
+}) {
   const [show, setShow] = useState(false);
 
   return (
@@ -11,6 +16,7 @@ export default function PasswordInput({ value, onChange, placeholder }) {
         onChange={onChange}
         placeholder={placeholder}
         className="w-full bg-transparent px-14 py-12 text-[12px] text-[#1C2B4A] placeholder-[#8A96B0] outline-none"
+        {...rest}
       />
       <button
         type="button"

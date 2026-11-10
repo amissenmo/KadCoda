@@ -1,5 +1,11 @@
+import { useState } from 'react';
+
+import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router';
+
+import Spinner from '../../../components/ui/Spinner';
+import { listUsers } from '../../../services/adminApi';
 
 const container = {
   hidden: {},
@@ -20,82 +26,69 @@ const rowAnim = {
   },
 };
 
-const users = [
-  {
-    id: 1,
-    name: 'رضا کریمی',
-    email: 'reza.karimi@example.com',
-    role: 'دانشجو',
+const formatRole = (role) => {
+  if (role === 'admin') {
+    return {
+      label: 'مدیر',
+      roleClass: 'bg-[#FEE2E2] text-[#B91C1C]',
+      color: 'from-[#7F1D1D] to-[#EF4444]',
+    };
+  }
+  if (role === 'teacher' || role === 'instructor') {
+    return {
+      label: 'مدرس',
+      roleClass: 'bg-[#FFF3DC] text-[#B07D00]',
+      color: 'from-[#B07D00] to-[#F7B928]',
+    };
+  }
+  return {
+    label: 'دانشجو',
     roleClass: 'bg-[#DCE5F4] text-[#193B73]',
-    mobile: '۰۹۱۲ ۳۴۵ ۶۷۸۹',
-    courses: 4,
-    joined: '۱۴۰۳/۰۳/۱۲',
-    avatar: 'ر',
     color: 'from-[#1E4D9C] to-primary-600',
-  },
-  {
-    id: 2,
-    name: 'مریم احمدی',
-    email: 'maryam.a@example.com',
-    role: 'مدرس',
-    roleClass: 'bg-[#FFF3DC] text-[#B07D00]',
-    mobile: '۰۹۳۵ ۱۱۱ ۲۲۳۳',
-    courses: 6,
-    joined: '۱۴۰۳/۰۲/۰۵',
-    avatar: 'م',
-    color: 'from-[#B07D00] to-[#F7B928]',
-  },
-  {
-    id: 3,
-    name: 'داود بهمنی',
-    email: 'davood.b@example.com',
-    role: 'مدرس',
-    roleClass: 'bg-[#FFF3DC] text-[#B07D00]',
-    mobile: '۰۹۱۹ ۸۸۸ ۷۷۶۶',
-    courses: 3,
-    joined: '۱۴۰۳/۰۴/۲۱',
-    avatar: 'د',
-    color: 'from-[#B07D00] to-[#F7B928]',
-  },
-  {
-    id: 4,
-    name: 'سارا محمدی',
-    email: 'sara.m@example.com',
-    role: 'دانشجو',
-    roleClass: 'bg-[#DCE5F4] text-[#193B73]',
-    mobile: '۰۹۱۲ ۵۵۵ ۴۴۳۳',
-    courses: 2,
-    joined: '۱۴۰۳/۰۵/۰۹',
-    avatar: 'س',
-    color: 'from-[#1E4D9C] to-primary-600',
-  },
-  {
-    id: 5,
-    name: 'علی رضایی',
-    email: 'ali.rezaei@example.com',
-    role: 'مدیر',
-    roleClass: 'bg-[#FEE2E2] text-[#B91C1C]',
-    mobile: '۰۹۳۳ ۷۷۷ ۸۸۹۹',
-    courses: 0,
-    joined: '۱۴۰۲/۱۱/۳۰',
-    avatar: 'ع',
-    color: 'from-[#7F1D1D] to-[#EF4444]',
-  },
-  {
-    id: 6,
-    name: 'زهرا نوری',
-    email: 'zahra.n@example.com',
-    role: 'دانشجو',
-    roleClass: 'bg-[#DCE5F4] text-[#193B73]',
-    mobile: '۰۹۱۰ ۲۲۲ ۳۳۴۴',
-    courses: 5,
-    joined: '۱۴۰۳/۰۱/۱۸',
-    avatar: 'ز',
-    color: 'from-[#1E4D9C] to-primary-600',
-  },
-];
+  };
+};
 
-export default function PanelAdminUsers() {
+function PanelAdminUsers() {
+  const [search, setSearch] = useState('');
+
+  const { data: usersData, isLoading } = useQuery({
+    queryKey: ['admin-users', search],
+    queryFn: () => listUsers({ search: search.trim() || undefined }),
+  });
+
+  const rawUsers = Array.isArray(usersData)
+    ? usersData
+    : Array.isArray(usersData?.data)
+      ? usersData.data
+      : Array.isArray(usersData?.users)
+        ? usersData.users
+        : [];
+
+  const users = rawUsers.map((u, idx) => {
+    const fullName =
+      `${u.first_name || ''} ${u.last_name || ''}`.trim() ||
+      u.name ||
+      u.mobile ||
+      `کاربر #${idx + 1}`;
+    const roleMeta = formatRole(u.role);
+    const joinedDate = u.created_at
+      ? new Date(u.created_at).toLocaleDateString('fa-IR')
+      : u.joined || '۱۴۰۳/۰۵/۱۲';
+
+    return {
+      id: u.id || idx + 1,
+      name: fullName,
+      email: u.email || '—',
+      role: roleMeta.label,
+      roleClass: roleMeta.roleClass,
+      mobile: u.mobile || '—',
+      courses: Number(u.courses_count ?? u.courses ?? 0),
+      joined: joinedDate,
+      avatar: fullName.charAt(0) || 'ک',
+      color: roleMeta.color,
+    };
+  });
+
   return (
     <>
       <motion.div
@@ -150,121 +143,143 @@ export default function PanelAdminUsers() {
                 </svg>
                 <input
                   type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   placeholder="جستجوی کاربر..."
                   className="w-160 bg-transparent text-[11px] text-[#1C2B4A] placeholder-[#8A96B0] outline-none"
                 />
               </div>
 
               <span className="text-primary-600 rounded-full bg-[#DCE5F4] px-12 py-4 text-[11px] font-bold">
-                {users.length} کاربر
+                {users.length.toLocaleString('fa-IR')} کاربر
               </span>
             </div>
           </div>
 
-          <div className="mt-20 overflow-x-auto">
-            <table className="w-full min-w-700 border-separate border-spacing-y-8">
-              <thead>
-                <tr>
-                  <th className="text-right text-[11px] font-bold text-[#8A96B0]">
-                    کاربر
-                  </th>
-                  <th className="text-center text-[11px] font-bold text-[#8A96B0]">
-                    نقش
-                  </th>
-                  <th className="text-center text-[11px] font-bold text-[#8A96B0]">
-                    شماره موبایل
-                  </th>
-                  <th className="text-center text-[11px] font-bold text-[#8A96B0]">
-                    تعداد دوره‌ها
-                  </th>
-                  <th className="text-center text-[11px] font-bold text-[#8A96B0]">
-                    تاریخ عضویت
-                  </th>
-                  <th className="text-center text-[11px] font-bold text-[#8A96B0]">
-                    عملیات
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <motion.tr key={user.id} variants={rowAnim} className="group">
-                    <td className="rounded-r-xl bg-[#E4E9F2] p-12 shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666]">
-                      <div className="flex items-center gap-10">
-                        <span
-                          className={`flex h-40 w-40 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${user.color} text-xs font-black text-white shadow-[3px_3px_8px_0px_#193B734D]`}
-                        >
-                          {user.avatar}
-                        </span>
-                        <div className="flex flex-col gap-2">
-                          <span className="text-xs font-bold text-[#1C2B4A]">
-                            {user.name}
+          {isLoading ? (
+            <Spinner />
+          ) : (
+            <div className="mt-20 overflow-x-auto">
+              <table className="w-full min-w-700 border-separate border-spacing-y-8">
+                <thead>
+                  <tr>
+                    <th className="text-right text-[11px] font-bold text-[#8A96B0]">
+                      کاربر
+                    </th>
+                    <th className="text-center text-[11px] font-bold text-[#8A96B0]">
+                      نقش
+                    </th>
+                    <th className="text-center text-[11px] font-bold text-[#8A96B0]">
+                      شماره موبایل
+                    </th>
+                    <th className="text-center text-[11px] font-bold text-[#8A96B0]">
+                      تعداد دوره‌ها
+                    </th>
+                    <th className="text-center text-[11px] font-bold text-[#8A96B0]">
+                      تاریخ عضویت
+                    </th>
+                    <th className="text-center text-[11px] font-bold text-[#8A96B0]">
+                      عملیات
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <motion.tr
+                      key={user.id}
+                      variants={rowAnim}
+                      className="group"
+                    >
+                      <td className="rounded-r-xl bg-[#E4E9F2] p-12 shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666]">
+                        <div className="flex items-center gap-10">
+                          <span
+                            className={`flex h-40 w-40 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${user.color} text-xs font-black text-white shadow-[3px_3px_8px_0px_#193B734D]`}
+                          >
+                            {user.avatar}
                           </span>
-                          <span className="text-[10px] text-[#8A96B0]">
-                            {user.email}
-                          </span>
+                          <div className="flex flex-col gap-2">
+                            <span className="text-xs font-bold text-[#1C2B4A]">
+                              {user.name}
+                            </span>
+                            <span className="text-[10px] text-[#8A96B0]">
+                              {user.email}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
-                      <span
-                        className={`rounded-full px-12 py-4 text-[10px] font-bold ${user.roleClass}`}
-                      >
-                        {user.role}
-                      </span>
-                    </td>
-
-                    <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
-                      <span
-                        dir="ltr"
-                        className="text-[11px] font-bold text-[#1C2B4A]"
-                      >
-                        {user.mobile}
-                      </span>
-                    </td>
-
-                    <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
-                      <span className="text-primary-600 text-xs font-black">
-                        {user.courses}
-                      </span>
-                    </td>
-
-                    <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
-                      <span className="text-[11px] font-bold text-[#1C2B4A]">
-                        {user.joined}
-                      </span>
-                    </td>
-
-                    <td className="rounded-l-xl bg-[#E4E9F2] p-12 text-center shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666]">
-                      <Link
-                        to="/panel-admin/editUser"
-                        type="button"
-                        aria-label="ویرایش کاربر"
-                        className="to-primary-600 inline-flex h-36 w-36 cursor-pointer items-center justify-center rounded-xl bg-gradient-to-br from-[#1E4D9C] text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 hover:brightness-110"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.8}
-                          stroke="currentColor"
-                          className="h-16 w-16"
+                      <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
+                        <span
+                          className={`rounded-full px-12 py-4 text-[10px] font-bold ${user.roleClass}`}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"
-                          />
-                        </svg>
-                      </Link>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                          {user.role}
+                        </span>
+                      </td>
+
+                      <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
+                        <span
+                          dir="ltr"
+                          className="text-[11px] font-bold text-[#1C2B4A]"
+                        >
+                          {user.mobile}
+                        </span>
+                      </td>
+
+                      <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
+                        <span className="text-primary-600 text-xs font-black">
+                          {user.courses.toLocaleString('fa-IR')}
+                        </span>
+                      </td>
+
+                      <td className="bg-[#E4E9F2] p-12 text-center shadow-[inset_0_-2px_4px_0px_#FFFFFFCC,_inset_0_2px_5px_0px_#A3B1C666]">
+                        <span className="text-[11px] font-bold text-[#1C2B4A]">
+                          {user.joined}
+                        </span>
+                      </td>
+
+                      <td className="rounded-l-xl bg-[#E4E9F2] p-12 text-center shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666]">
+                        <Link
+                          to={`/panel-admin/editUser?id=${user.id}`}
+                          type="button"
+                          aria-label="ویرایش کاربر"
+                          className="to-primary-600 inline-flex h-36 w-36 cursor-pointer items-center justify-center rounded-xl bg-gradient-to-br from-[#1E4D9C] text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 hover:brightness-110"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.8}
+                            stroke="currentColor"
+                            className="h-16 w-16"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"
+                            />
+                          </svg>
+                        </Link>
+                      </td>
+                    </motion.tr>
+                  ))}
+                  {users.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="rounded-xl bg-[#E4E9F2] p-20 text-center text-xs font-bold text-[#8A96B0]"
+                      >
+                        هیچ کاربری یافت نشد.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </motion.div>
       </motion.section>
     </>
   );
 }
+
+export default PanelAdminUsers;

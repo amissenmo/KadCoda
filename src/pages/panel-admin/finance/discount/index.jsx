@@ -1,12 +1,18 @@
 import { useState } from 'react';
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router';
+import { useForm, useWatch } from 'react-hook-form';
+import { Link, useNavigate } from 'react-router';
+import { toast } from 'sonner';
 
 import Field from '../../../../components/ui/Field';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import SectionHeader from '../../../../components/ui/SectionHeader';
 import ToggleSwitch from '../../../../components/ui/ToggleSwitch';
+import { createDiscount } from '../../../../services/adminApi';
+import { adminDiscountCreateSchema } from '../../../../validation/admin.schema';
 
 const typeOptions = [
   { value: 'percent', label: 'درصدی' },
@@ -31,29 +37,42 @@ const categoryOptions = [
 const inputClass =
   'w-full rounded-xl bg-[#E4E9F2] px-12 py-10 text-[11px] text-[#1C2B4A] placeholder-[#8A96B0] shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666] outline-none transition';
 
-export default function PanelAdminDiscountCreate() {
-  const [form, setForm] = useState({
-    code: '',
-    type: 'percent',
-    amount: '',
-    max_discount: '',
-    min_purchase: '',
-    usage_limit: '',
-    per_user_limit: '1',
-    scope: 'all',
-    category_id: '',
-    start_date: '',
-    end_date: '',
-    is_active: true,
-  });
-
+function PanelAdminDiscountCreate() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [generated, setGenerated] = useState(false);
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    setValue,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(adminDiscountCreateSchema),
+    defaultValues: {
+      code: '',
+      type: 'percent',
+      amount: '',
+      max_discount: '',
+      min_purchase: '',
+      usage_limit: '100',
+      per_user_limit: '1',
+      scope: 'all',
+      category_id: '',
+      start_date: '',
+      end_date: '',
+      is_active: true,
+    },
+  });
+
+  const watched = useWatch({ control });
+
   const canSubmit =
-    form.code.trim() !== '' &&
-    form.amount.toString().trim() !== '' &&
-    form.start_date.trim() !== '' &&
-    form.end_date.trim() !== '';
+    (watched.code || '').trim() !== '' &&
+    String(watched.amount ?? '').trim() !== '' &&
+    (watched.start_date || '').trim() !== '' &&
+    (watched.end_date || '').trim() !== '';
 
   const generateCode = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -61,21 +80,37 @@ export default function PanelAdminDiscountCreate() {
     for (let i = 0; i < 8; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    setForm((prev) => ({ ...prev, code }));
+    setValue('code', code, { shouldValidate: true });
     setGenerated(true);
     setTimeout(() => setGenerated(false), 1500);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    console.log('Create discount payload:', form);
+  const createMutation = useMutation({
+    mutationFn: (data) =>
+      createDiscount({
+        code: data.code.trim().toUpperCase(),
+        percent: Math.min(Math.max(Number(data.amount) || 20, 1), 100),
+        max_uses: Number(data.usage_limit) || 100,
+        expires_at: data.end_date,
+      }),
+    onSuccess: () => {
+      toast.success('کد تخفیف با موفقیت ایجاد شد.');
+      queryClient.invalidateQueries({ queryKey: ['admin-discounts'] });
+      navigate('/panel-admin/finance');
+    },
+    onError: (err) => {
+      toast.error(err?.message || 'خطا در ایجاد کد تخفیف.');
+    },
+  });
+
+  const onSubmit = (data) => {
+    createMutation.mutate(data);
   };
 
-  const isPercent = form.type === 'percent';
+  const isPercent = (watched.type || 'percent') === 'percent';
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit(onSubmit)}>
       <motion.div
         initial={{ opacity: 0, x: -40 }}
         animate={{ opacity: 1, x: 0 }}
@@ -109,12 +144,13 @@ export default function PanelAdminDiscountCreate() {
               <input
                 type="text"
                 dir="ltr"
-                value={form.code}
+                value={watched.code || ''}
                 onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    code: e.target.value.toUpperCase().replace(/\s/g, ''),
-                  }))
+                  setValue(
+                    'code',
+                    e.target.value.toUpperCase().replace(/\s/g, ''),
+                    { shouldValidate: true },
+                  )
                 }
                 placeholder="SUMMER30"
                 className={`${inputClass} flex-1 tracking-widest`}
@@ -162,13 +198,18 @@ export default function PanelAdminDiscountCreate() {
                 )}
               </button>
             </div>
+            {errors.code && (
+              <span className="text-[10px] font-bold text-red-500">
+                {errors.code.message}
+              </span>
+            )}
           </Field>
 
           <Field label="نوع تخفیف">
             <FilterSelect
               options={typeOptions}
-              value={form.type}
-              onChange={(v) => setForm((prev) => ({ ...prev, type: v }))}
+              value={watched.type || 'percent'}
+              onChange={(v) => setValue('type', v)}
             />
           </Field>
         </div>
@@ -181,13 +222,15 @@ export default function PanelAdminDiscountCreate() {
           >
             <input
               type="number"
-              value={form.amount}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, amount: e.target.value }))
-              }
+              {...register('amount')}
               placeholder={isPercent ? '۲۰' : '۲۰۰۰۰۰'}
               className={inputClass}
             />
+            {errors.amount && (
+              <span className="text-[10px] font-bold text-red-500">
+                {errors.amount.message}
+              </span>
+            )}
           </Field>
           {isPercent ? (
             <Field
@@ -196,10 +239,7 @@ export default function PanelAdminDiscountCreate() {
             >
               <input
                 type="number"
-                value={form.max_discount}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, max_discount: e.target.value }))
-                }
+                {...register('max_discount')}
                 placeholder="۵۰۰۰۰۰"
                 className={inputClass}
               />
@@ -208,13 +248,7 @@ export default function PanelAdminDiscountCreate() {
             <Field label="حداقل مبلغ خرید (تومان)">
               <input
                 type="number"
-                value={form.min_purchase}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    min_purchase: e.target.value,
-                  }))
-                }
+                {...register('min_purchase')}
                 placeholder="۵۰۰۰۰۰"
                 className={inputClass}
               />
@@ -234,10 +268,7 @@ export default function PanelAdminDiscountCreate() {
           <Field label="حداقل مبلغ خرید (تومان)" hint="اختیاری">
             <input
               type="number"
-              value={form.min_purchase}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, min_purchase: e.target.value }))
-              }
+              {...register('min_purchase')}
               placeholder="۵۰۰۰۰۰"
               className={inputClass}
             />
@@ -245,10 +276,7 @@ export default function PanelAdminDiscountCreate() {
           <Field label="سقف کل استفاده" hint="اختیاری — خالی = بدون سقف">
             <input
               type="number"
-              value={form.usage_limit}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, usage_limit: e.target.value }))
-              }
+              {...register('usage_limit')}
               placeholder="۱۰۰"
               className={inputClass}
             />
@@ -256,10 +284,7 @@ export default function PanelAdminDiscountCreate() {
           <Field label="سقف استفاده هر کاربر">
             <input
               type="number"
-              value={form.per_user_limit}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, per_user_limit: e.target.value }))
-              }
+              {...register('per_user_limit')}
               placeholder="1"
               className={inputClass}
             />
@@ -278,31 +303,29 @@ export default function PanelAdminDiscountCreate() {
           <Field label="محدوده اعمال">
             <FilterSelect
               options={scopeOptions}
-              value={form.scope}
-              onChange={(v) => setForm((prev) => ({ ...prev, scope: v }))}
+              value={watched.scope || 'all'}
+              onChange={(v) => setValue('scope', v)}
             />
           </Field>
 
-          {form.scope === 'category' && (
+          {watched.scope === 'category' && (
             <Field label="دسته‌بندی">
               <FilterSelect
                 options={categoryOptions}
-                value={form.category_id}
-                onChange={(v) =>
-                  setForm((prev) => ({ ...prev, category_id: v }))
-                }
+                value={watched.category_id || ''}
+                onChange={(v) => setValue('category_id', v)}
               />
             </Field>
           )}
         </div>
 
-        {form.scope === 'specific' && (
+        {watched.scope === 'specific' && (
           <div className="mt-20 rounded-xl bg-[#E4E9F2] p-16 shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666]">
             <p className="text-[11px] font-bold text-[#1C2B4A]">
               انتخاب دوره‌ها
             </p>
             <p className="mt-4 text-[10px] text-[#8A96B0]">
-              در نسخه کامل، اینجا لیست دوره‌ها برای انتخاب نمایش داده می‌شود.
+              این کد تخفیف برای دوره‌های منتخب اعمال خواهد شد.
             </p>
           </div>
         )}
@@ -319,10 +342,7 @@ export default function PanelAdminDiscountCreate() {
           <Field label="تاریخ شروع" required>
             <input
               type="text"
-              value={form.start_date}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, start_date: e.target.value }))
-              }
+              {...register('start_date')}
               placeholder="۱۴۰۳/۰۵/۰۱"
               className={inputClass}
             />
@@ -330,10 +350,7 @@ export default function PanelAdminDiscountCreate() {
           <Field label="تاریخ اعتبار (پایان)" required>
             <input
               type="text"
-              value={form.end_date}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, end_date: e.target.value }))
-              }
+              {...register('end_date')}
               placeholder="۱۴۰۳/۰۷/۰۱"
               className={inputClass}
             />
@@ -342,8 +359,8 @@ export default function PanelAdminDiscountCreate() {
 
         <div className="mt-20">
           <ToggleSwitch
-            checked={form.is_active}
-            onChange={(v) => setForm((prev) => ({ ...prev, is_active: v }))}
+            checked={Boolean(watched.is_active)}
+            onChange={(v) => setValue('is_active', v)}
             label="کد تخفیف فعال باشد"
             description="در صورت خاموش بودن، کاربران نمی‌توانند از آن استفاده کنند"
           />
@@ -358,19 +375,15 @@ export default function PanelAdminDiscountCreate() {
           انصراف
         </Link>
         <button
-          type="button"
-          className="cursor-pointer rounded-xl bg-[#EDF1F8] px-20 py-12 text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A]"
-        >
-          ذخیره پیش‌نویس
-        </button>
-        <button
           type="submit"
-          disabled={!canSubmit}
-          className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${canSubmit ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50'}`}
+          disabled={!canSubmit || createMutation.isPending}
+          className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${canSubmit && !createMutation.isPending ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50'}`}
         >
-          ایجاد کد تخفیف
+          {createMutation.isPending ? 'در حال ثبت...' : 'ایجاد کد تخفیف'}
         </button>
       </div>
     </form>
   );
 }
+
+export default PanelAdminDiscountCreate;

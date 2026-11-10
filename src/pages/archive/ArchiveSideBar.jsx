@@ -1,9 +1,48 @@
 import { useState } from 'react';
 
-const ArchiveSideBar = () => {
-  const [sortBy, setSortBy] = useState('newest');
-  const [onlyFree, setOnlyFree] = useState(false);
+const ArchiveSideBar = ({
+  sortBy: controlledSort,
+  onSortChange,
+  onlyFree: controlledOnlyFree,
+  onOnlyFreeChange,
+  searchQuery: controlledSearch,
+  onSearchChange,
+}) => {
+  const [internalSort, setInternalSort] = useState('newest');
+  const [internalOnlyFree, setInternalOnlyFree] = useState(false);
+  const [internalSearch, setInternalSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+
+  const sortBy = controlledSort !== undefined ? controlledSort : internalSort;
+  const onlyFree =
+    controlledOnlyFree !== undefined ? controlledOnlyFree : internalOnlyFree;
+  const searchQuery =
+    controlledSearch !== undefined ? controlledSearch : internalSearch;
+
+  const handleSort = (nextSort) => {
+    if (onSortChange) {
+      onSortChange(nextSort);
+    } else {
+      setInternalSort(nextSort);
+    }
+  };
+
+  const handleToggleFree = () => {
+    const nextVal = !onlyFree;
+    if (onOnlyFreeChange) {
+      onOnlyFreeChange(nextVal);
+    } else {
+      setInternalOnlyFree(nextVal);
+    }
+  };
+
+  const handleSearch = (nextSearch) => {
+    if (onSearchChange) {
+      onSearchChange(nextSearch);
+    } else {
+      setInternalSearch(nextSearch);
+    }
+  };
 
   return (
     <>
@@ -56,6 +95,8 @@ const ArchiveSideBar = () => {
 
           <input
             type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
             placeholder="دوره مورد نظر ..."
             className="w-full rounded-md border border-gray-300/50 px-9 py-8 placeholder:text-gray-500"
           />
@@ -88,7 +129,7 @@ const ArchiveSideBar = () => {
                 name="sort"
                 value="newest"
                 checked={sortBy === 'newest'}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => handleSort(e.target.value)}
                 className="accent-primary-600 size-17"
               />
               جدیدترین
@@ -99,7 +140,7 @@ const ArchiveSideBar = () => {
                 name="sort"
                 value="oldest"
                 checked={sortBy === 'oldest'}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => handleSort(e.target.value)}
                 className="accent-primary-600 size-17"
               />
               قدیمی‌ترین
@@ -110,7 +151,7 @@ const ArchiveSideBar = () => {
                 name="sort"
                 value="popular"
                 checked={sortBy === 'popular'}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => handleSort(e.target.value)}
                 className="accent-primary-600 size-17"
               />
               محبوب‌ترین
@@ -119,9 +160,9 @@ const ArchiveSideBar = () => {
               <input
                 type="radio"
                 name="sort"
-                value="price"
-                checked={sortBy === 'price'}
-                onChange={(e) => setSortBy(e.target.value)}
+                value="price_asc"
+                checked={sortBy === 'price_asc' || sortBy === 'price'}
+                onChange={() => handleSort('price_asc')}
                 className="accent-primary-600 size-17"
               />
               ارزان‌ترین
@@ -135,7 +176,8 @@ const ArchiveSideBar = () => {
               فقط دوره‌های رایگان
             </span>
             <button
-              onClick={() => setOnlyFree(!onlyFree)}
+              type="button"
+              onClick={handleToggleFree}
               className={`relative inline-flex h-22 w-46 items-center rounded-full p-1 transition-colors ${
                 onlyFree ? 'bg-primary-600' : 'bg-gray-300'
               }`}
@@ -150,10 +192,15 @@ const ArchiveSideBar = () => {
         </div>
 
         <div className="mt-18 grid grid-cols-6 gap-8 sm:mt-0 sm:hidden">
-          <button className="bg-primary-100 text-primary-500 col-span-3 cursor-pointer rounded-md px-8 py-8">
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="bg-primary-100 text-primary-500 col-span-3 cursor-pointer rounded-md px-8 py-8"
+          >
             مشاهده نتایج
           </button>
           <button
+            type="button"
             onClick={() => setIsOpen(false)}
             className="text-primary-900 shadow-primary-600/10 col-span-3 cursor-pointer rounded-md px-8 py-8 shadow-sm"
           >

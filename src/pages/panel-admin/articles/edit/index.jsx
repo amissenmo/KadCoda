@@ -1,13 +1,24 @@
 import { useState } from 'react';
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router';
+import { useForm, useWatch } from 'react-hook-form';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 
 import Field from '../../../../components/ui/Field';
 import FileInput from '../../../../components/ui/FileInput';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import SectionHeader from '../../../../components/ui/SectionHeader';
+import Spinner from '../../../../components/ui/Spinner';
 import ToggleSwitch from '../../../../components/ui/ToggleSwitch';
+import {
+  getArticleBySlug,
+  getArticles,
+  updateArticle,
+} from '../../../../services/articleApi';
+import { adminArticleSchema } from '../../../../validation/admin.schema';
 
 const statusOptions = [
   { value: 'draft', label: 'پیش‌نویس' },
@@ -24,55 +35,61 @@ const categoryOptions = [
   { value: 'data', label: 'علم داده' },
 ];
 
-const mockArticle = {
-  id: 2,
-  title: '۱۰ تکنیک حرفه‌ای برای بهینه‌سازی React',
-  slug: 'react-optimization-techniques',
-  excerpt:
-    'با useMemo، useCallback و React.memo سرعت اپلیکیشن خود را چند برابر کنید.',
-  content: `React یکی از محبوب‌ترین کتابخانه‌های جاوااسکریپت برای ساخت رابط‌های کاربری است. اما با بزرگ شدن پروژه‌ها، ممکن است عملکرد اپلیکیشن کاهش پیدا کند.
-
-## ۱. استفاده از React.memo
-کامپوننت‌هایی که propهایشان تغییر نمی‌کند را با React.memo بپوشانید تا از رندر مجدد جلوگیری شود.
-
-## ۲. useMemo و useCallback
-محاسبات سنگین را با useMemo و توابع را با useCallback کش کنید.
-
-## ۳. تقسیم کد (Code Splitting)
-با React.lazy و Suspense فقط کدهای لازم را بارگذاری کنید.`,
-  cover: null,
-  coverName: 'react-optimization-cover.jpg',
-  category_id: 'frontend',
-  status: 'published',
-  tags: 'react, performance, frontend',
-  is_published: true,
-  updated_at: '۱۴۰۳/۰۵/۱۰',
-};
-
 const inputClass =
   'w-full rounded-xl bg-[#E4E9F2] px-12 py-10 text-[11px] text-[#1C2B4A] placeholder-[#8A96B0] shadow-[inset_-2px_-2px_4px_0px_#FFFFFFCC,_inset_2px_2px_5px_0px_#A3B1C666] outline-none transition';
 
-export default function PanelAdminArticleEdit() {
-  const [form, setForm] = useState({
-    title: mockArticle.title,
-    slug: mockArticle.slug,
-    excerpt: mockArticle.excerpt,
-    content: mockArticle.content,
-    cover: mockArticle.cover,
-    category_id: mockArticle.category_id,
-    status: mockArticle.status,
-    tags: mockArticle.tags,
-    is_published: mockArticle.is_published,
+function PanelAdminArticleEdit() {
+  const [searchParams] = useSearchParams();
+  const slugParam = searchParams.get('slug');
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const { data: articlesList, isLoading: listLoading } = useQuery({
+    queryKey: ['articles'],
+    queryFn: () => getArticles({ limit: 50 }),
+    enabled: !slugParam,
   });
+
+  const fallbackSlug =
+    slugParam ||
+    (Array.isArray(articlesList?.data) && articlesList.data[0]?.slug) ||
+    (Array.isArray(articlesList) && articlesList[0]?.slug) ||
+    '';
+
+  const { data: articleDetail, isLoading: detailLoading } = useQuery({
+    queryKey: ['article', fallbackSlug],
+    queryFn: () => getArticleBySlug(fallbackSlug),
+    enabled: Boolean(fallbackSlug),
+  });
+
+  const articleObj = articleDetail?.data || articleDetail || {};
+  const tagsArray = Array.isArray(articleObj.tags) ? articleObj.tags : [];
+
+  const { register, handleSubmit, control, setValue } = useForm({
+    resolver: zodResolver(adminArticleSchema),
+    values: {
+      title: articleObj.title || 'مقاله تخصصی کدکدا',
+      slug: articleObj.slug || fallbackSlug || 'article-slug',
+      excerpt: articleObj.excerpt || 'خلاصه مقاله آموزشی برنامه‌نویسی.',
+      content:
+        articleObj.content_markdown ||
+        articleObj.content ||
+        'متن مقاله آموزشی...',
+      category_id: tagsArray[0] || 'frontend',
+      status: 'published',
+      tags: tagsArray.join(', '),
+      is_published: true,
+    },
+  });
+
+  const watched = useWatch({ control });
   const [slugTouched, setSlugTouched] = useState(true);
-  const [coverName, setCoverName] = useState(mockArticle.coverName);
+  const [coverName, setCoverName] = useState('article-cover.jpg');
 
   const canSubmit =
-    form.title.trim() !== '' &&
-    form.slug.trim() !== '' &&
-    form.excerpt.trim() !== '' &&
-    form.content.trim() !== '' &&
-    form.category_id !== '';
+    (watched.title || '').trim() !== '' &&
+    (watched.slug || '').trim() !== '' &&
+    (watched.content || '').trim() !== '';
 
   const slugify = (text) =>
     text
@@ -83,21 +100,45 @@ export default function PanelAdminArticleEdit() {
 
   const handleTitleChange = (e) => {
     const title = e.target.value;
-    setForm((prev) => ({
-      ...prev,
-      title,
-      slug: slugTouched ? prev.slug : slugify(title),
-    }));
+    setValue('title', title, { shouldValidate: true });
+    if (!slugTouched) {
+      setValue('slug', slugify(title), { shouldValidate: true });
+    }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    console.log('Update article payload:', form);
+  const updateMutation = useMutation({
+    mutationFn: (data) => {
+      const parsedTags = (data.tags || '')
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+      return updateArticle(articleObj.id || fallbackSlug, {
+        title: data.title,
+        slug: data.slug,
+        content_markdown: data.content,
+        tags: parsedTags,
+      });
+    },
+    onSuccess: () => {
+      toast.success('تغییرات مقاله با موفقیت ذخیره شد.');
+      queryClient.invalidateQueries({ queryKey: ['articles'] });
+      navigate('/panel-admin/articles');
+    },
+    onError: (err) => {
+      toast.error(err?.message || 'خطا در بروزرسانی مقاله.');
+    },
+  });
+
+  const onSubmit = (data) => {
+    updateMutation.mutate(data);
   };
+
+  if (listLoading || detailLoading) {
+    return <Spinner />;
+  }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit(onSubmit)}>
       <motion.div
         initial={{ opacity: 0, x: -40 }}
         animate={{ opacity: 1, x: 0 }}
@@ -111,9 +152,8 @@ export default function PanelAdminArticleEdit() {
           <p className="pt-8 text-[12px] text-[#8A96B0]">
             شناسه مقاله:{' '}
             <span className="text-primary-600 font-black">
-              #{mockArticle.id}
-            </span>{' '}
-            · آخرین به‌روزرسانی: {mockArticle.updated_at}
+              #{articleObj.id || '—'}
+            </span>
           </p>
         </div>
 
@@ -133,7 +173,7 @@ export default function PanelAdminArticleEdit() {
           <Field label="عنوان مقاله" required>
             <input
               type="text"
-              value={form.title}
+              value={watched.title || ''}
               onChange={handleTitleChange}
               placeholder="عنوان مقاله"
               className={inputClass}
@@ -147,10 +187,10 @@ export default function PanelAdminArticleEdit() {
             <input
               type="text"
               dir="ltr"
-              value={form.slug}
+              value={watched.slug || ''}
               onChange={(e) => {
                 setSlugTouched(true);
-                setForm((prev) => ({ ...prev, slug: e.target.value }));
+                setValue('slug', e.target.value, { shouldValidate: true });
               }}
               placeholder="article-slug"
               className={inputClass}
@@ -159,16 +199,12 @@ export default function PanelAdminArticleEdit() {
         </div>
         <Field
           label="خلاصه مقاله"
-          required
           className="mt-20"
           hint="حداکثر ۲ خط، در کارت مقاله نمایش داده می‌شود"
         >
           <textarea
             rows={3}
-            value={form.excerpt}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, excerpt: e.target.value }))
-            }
+            {...register('excerpt')}
             placeholder="خلاصه‌ای کوتاه از محتوای مقاله..."
             className={`${inputClass} resize-none`}
           />
@@ -189,10 +225,7 @@ export default function PanelAdminArticleEdit() {
         >
           <textarea
             rows={14}
-            value={form.content}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, content: e.target.value }))
-            }
+            {...register('content')}
             placeholder="متن کامل مقاله را اینجا بنویسید..."
             className={`${inputClass} resize-y`}
           />
@@ -220,18 +253,15 @@ export default function PanelAdminArticleEdit() {
               accept="image/*"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) {
-                  setCoverName(f.name);
-                  setForm((prev) => ({ ...prev, cover: f }));
-                }
+                if (f) setCoverName(f.name);
               }}
             />
           </Field>
-          <Field label="دسته‌بندی" required>
+          <Field label="دسته‌بندی">
             <FilterSelect
               options={categoryOptions}
-              value={form.category_id}
-              onChange={(v) => setForm((prev) => ({ ...prev, category_id: v }))}
+              value={watched.category_id || 'frontend'}
+              onChange={(v) => setValue('category_id', v)}
             />
           </Field>
         </div>
@@ -240,17 +270,14 @@ export default function PanelAdminArticleEdit() {
           <Field label="وضعیت انتشار">
             <FilterSelect
               options={statusOptions}
-              value={form.status}
-              onChange={(v) => setForm((prev) => ({ ...prev, status: v }))}
+              value={watched.status || 'published'}
+              onChange={(v) => setValue('status', v)}
             />
           </Field>
           <Field label="برچسب‌ها" hint="با کاما جدا کنید">
             <input
               type="text"
-              value={form.tags}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, tags: e.target.value }))
-              }
+              {...register('tags')}
               placeholder="react, performance, frontend"
               className={inputClass}
             />
@@ -259,8 +286,8 @@ export default function PanelAdminArticleEdit() {
 
         <div className="mt-20">
           <ToggleSwitch
-            checked={form.is_published}
-            onChange={(v) => setForm((prev) => ({ ...prev, is_published: v }))}
+            checked={Boolean(watched.is_published)}
+            onChange={(v) => setValue('is_published', v)}
             label="مقاله منتشر شود"
             description="در صورت خاموش بودن به‌عنوان پیش‌نویس ذخیره می‌شود"
           />
@@ -275,19 +302,15 @@ export default function PanelAdminArticleEdit() {
           انصراف
         </Link>
         <button
-          type="button"
-          className="cursor-pointer rounded-xl bg-[#EDF1F8] px-20 py-12 text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A]"
-        >
-          ذخیره پیش‌نویس
-        </button>
-        <button
           type="submit"
-          disabled={!canSubmit}
-          className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${canSubmit ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50'}`}
+          disabled={!canSubmit || updateMutation.isPending}
+          className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${canSubmit && !updateMutation.isPending ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50'}`}
         >
-          ذخیره تغییرات
+          {updateMutation.isPending ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
         </button>
       </div>
     </form>
   );
 }
+
+export default PanelAdminArticleEdit;

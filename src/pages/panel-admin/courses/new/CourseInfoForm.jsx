@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
+import { useForm, useWatch } from 'react-hook-form';
 import { Link } from 'react-router';
 
 import Field from '../../../../components/ui/Field';
@@ -8,6 +10,7 @@ import FileInput from '../../../../components/ui/FileInput';
 import FilterSelect from '../../../../components/ui/FilterSelect';
 import SectionHeader from '../../../../components/ui/SectionHeader';
 import ToggleSwitch from '../../../../components/ui/ToggleSwitch';
+import { adminCourseCreateSchema } from '../../../../validation/admin.schema';
 import {
   categoryOptions,
   inputClass,
@@ -17,51 +20,62 @@ import {
   teacherOptions,
 } from './constants';
 
-export default function CourseInfoForm({ onSubmit }) {
-  const [form, setForm] = useState({
-    title: '',
-    slug: '',
-    description: '',
-    cover_img: null,
-    cover_video: null,
-    duration: '',
-    status: 'draft',
-    level: '',
-    has_support: false,
-    is_active: true,
-    price: '',
-    discount_price: '',
-    category_id: '',
-    teacher_id: '',
-  });
+function CourseInfoForm({ onSubmit, isSubmitting = false }) {
   const [slugTouched, setSlugTouched] = useState(false);
   const [coverImgName, setCoverImgName] = useState('');
   const [coverVideoName, setCoverVideoName] = useState('');
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    setValue,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(adminCourseCreateSchema),
+    defaultValues: {
+      title: '',
+      slug: '',
+      description: '',
+      duration: '',
+      status: 'published',
+      level: 'beginner',
+      has_support: true,
+      is_active: true,
+      price: '',
+      discount_price: '',
+      category_id: '',
+      teacher_id: '',
+    },
+  });
+
+  const watched = useWatch({ control });
+
   const canSubmit =
-    form.title.trim() !== '' &&
-    form.slug.trim() !== '' &&
-    form.description.trim() !== '' &&
-    form.level !== '' &&
-    form.price.toString().trim() !== '';
+    (watched.title || '').trim() !== '' &&
+    (watched.slug || '').trim() !== '' &&
+    (watched.description || '').trim() !== '' &&
+    (watched.level || '') !== '' &&
+    String(watched.price ?? '').trim() !== '';
 
   const handleTitleChange = (e) => {
     const title = e.target.value;
-    setForm((prev) => ({
-      ...prev,
-      title,
-      slug: slugTouched ? prev.slug : slugify(title),
-    }));
+    setValue('title', title, { shouldValidate: true });
+    if (!slugTouched) {
+      setValue('slug', slugify(title), { shouldValidate: true });
+    }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!canSubmit) return;
-    onSubmit?.(form);
+  const onValidSubmit = (data) => {
+    onSubmit?.({
+      ...data,
+      cover_img_name: coverImgName,
+      cover_video_name: coverVideoName,
+    });
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit(onValidSubmit)}>
       <motion.div
         initial={{ opacity: 0, x: -40 }}
         animate={{ opacity: 1, x: 0 }}
@@ -88,11 +102,16 @@ export default function CourseInfoForm({ onSubmit }) {
           <Field label="عنوان دوره" required>
             <input
               type="text"
-              value={form.title}
+              value={watched.title || ''}
               onChange={handleTitleChange}
               placeholder="مثلاً دوره جامع پایتون"
               className={inputClass}
             />
+            {errors.title && (
+              <span className="text-[10px] font-bold text-red-500">
+                {errors.title.message}
+              </span>
+            )}
           </Field>
           <Field
             label="اسلاگ (Slug)"
@@ -102,26 +121,33 @@ export default function CourseInfoForm({ onSubmit }) {
             <input
               type="text"
               dir="ltr"
-              value={form.slug}
+              value={watched.slug || ''}
               onChange={(e) => {
                 setSlugTouched(true);
-                setForm((prev) => ({ ...prev, slug: e.target.value }));
+                setValue('slug', e.target.value, { shouldValidate: true });
               }}
               placeholder="python-complete-course"
               className={inputClass}
             />
+            {errors.slug && (
+              <span className="text-[10px] font-bold text-red-500">
+                {errors.slug.message}
+              </span>
+            )}
           </Field>
         </div>
         <Field label="توضیحات" required className="mt-20">
           <textarea
             rows={5}
-            value={form.description}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, description: e.target.value }))
-            }
+            {...register('description')}
             placeholder="توضیحات کامل دوره، سرفصل‌ها، مخاطب هدف..."
             className={`${inputClass} resize-none`}
           />
+          {errors.description && (
+            <span className="text-[10px] font-bold text-red-500">
+              {errors.description.message}
+            </span>
+          )}
         </Field>
       </motion.div>
 
@@ -136,16 +162,14 @@ export default function CourseInfoForm({ onSubmit }) {
           <Field label="سطح دوره" required>
             <FilterSelect
               options={levelOptions}
-              onChange={(v) => setForm((prev) => ({ ...prev, level: v }))}
+              value={watched.level || 'beginner'}
+              onChange={(v) => setValue('level', v, { shouldValidate: true })}
             />
           </Field>
           <Field label="مدت زمان">
             <input
               type="text"
-              value={form.duration}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, duration: e.target.value }))
-              }
+              {...register('duration')}
               placeholder="مثلاً ۲۸ ساعت"
               className={inputClass}
             />
@@ -153,7 +177,8 @@ export default function CourseInfoForm({ onSubmit }) {
           <Field label="وضعیت">
             <FilterSelect
               options={statusOptions}
-              onChange={(v) => setForm((prev) => ({ ...prev, status: v }))}
+              value={watched.status || 'published'}
+              onChange={(v) => setValue('status', v, { shouldValidate: true })}
             />
           </Field>
         </div>
@@ -161,13 +186,15 @@ export default function CourseInfoForm({ onSubmit }) {
           <Field label="قیمت (تومان)" required>
             <input
               type="number"
-              value={form.price}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, price: e.target.value }))
-              }
+              {...register('price')}
               placeholder="۱۲۰۰۰۰۰"
               className={inputClass}
             />
+            {errors.price && (
+              <span className="text-[10px] font-bold text-red-500">
+                {errors.price.message}
+              </span>
+            )}
           </Field>
           <Field
             label="قیمت با تخفیف (تومان)"
@@ -175,10 +202,7 @@ export default function CourseInfoForm({ onSubmit }) {
           >
             <input
               type="number"
-              value={form.discount_price}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, discount_price: e.target.value }))
-              }
+              {...register('discount_price')}
               placeholder="۹۸۰۰۰۰"
               className={inputClass}
             />
@@ -188,13 +212,15 @@ export default function CourseInfoForm({ onSubmit }) {
           <Field label="دسته‌بندی">
             <FilterSelect
               options={categoryOptions}
-              onChange={(v) => setForm((prev) => ({ ...prev, category_id: v }))}
+              value={watched.category_id || ''}
+              onChange={(v) => setValue('category_id', v)}
             />
           </Field>
           <Field label="مدرس">
             <FilterSelect
               options={teacherOptions}
-              onChange={(v) => setForm((prev) => ({ ...prev, teacher_id: v }))}
+              value={watched.teacher_id || ''}
+              onChange={(v) => setValue('teacher_id', v)}
             />
           </Field>
         </div>
@@ -216,7 +242,6 @@ export default function CourseInfoForm({ onSubmit }) {
                 const f = e.target.files?.[0];
                 if (f) {
                   setCoverImgName(f.name);
-                  setForm((prev) => ({ ...prev, cover_img: f }));
                 }
               }}
             />
@@ -229,7 +254,6 @@ export default function CourseInfoForm({ onSubmit }) {
                 const f = e.target.files?.[0];
                 if (f) {
                   setCoverVideoName(f.name);
-                  setForm((prev) => ({ ...prev, cover_video: f }));
                 }
               }}
             />
@@ -237,14 +261,14 @@ export default function CourseInfoForm({ onSubmit }) {
         </div>
         <div className="mt-20 grid grid-cols-1 gap-20 md:grid-cols-2">
           <ToggleSwitch
-            checked={form.has_support}
-            onChange={(v) => setForm((prev) => ({ ...prev, has_support: v }))}
+            checked={Boolean(watched.has_support)}
+            onChange={(v) => setValue('has_support', v)}
             label="پشتیبانی دارد"
             description="امکان ارسال تیکت برای دانشجویان"
           />
           <ToggleSwitch
-            checked={form.is_active}
-            onChange={(v) => setForm((prev) => ({ ...prev, is_active: v }))}
+            checked={Boolean(watched.is_active)}
+            onChange={(v) => setValue('is_active', v)}
             label="دوره فعال باشد"
             description="در صورت غیرفعال بودن نمایش داده نمی‌شود"
           />
@@ -253,23 +277,25 @@ export default function CourseInfoForm({ onSubmit }) {
 
       <div className="mt-20 flex flex-col-reverse gap-12 sm:flex-row sm:justify-end">
         <Link
-          to="/panel/admin/courses"
+          to="/panel-admin/courses"
           className="rounded-xl bg-[#EDF1F8] px-20 py-12 text-center text-[11px] font-bold text-[#8A96B0] shadow-[-3px_-3px_7px_0px_#FFFFFFE5,_4px_4px_10px_0px_#A3B1C673] transition duration-200 hover:text-[#1C2B4A]"
         >
           انصراف
         </Link>
         <button
           type="submit"
-          disabled={!canSubmit}
+          disabled={!canSubmit || isSubmitting}
           className={`to-primary-600 rounded-xl bg-gradient-to-br from-[#1E4D9C] px-20 py-12 text-[11px] font-black text-white shadow-[3px_3px_8px_0px_#193B734D] transition duration-200 ${
-            canSubmit
+            canSubmit && !isSubmitting
               ? 'cursor-pointer hover:brightness-110'
               : 'cursor-not-allowed opacity-50'
           }`}
         >
-          ایجاد دوره و ادامه ←
+          {isSubmitting ? 'در حال ایجاد دوره...' : 'ایجاد دوره و ادامه ←'}
         </button>
       </div>
     </form>
   );
 }
+
+export default CourseInfoForm;
