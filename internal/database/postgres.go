@@ -30,13 +30,13 @@ type PostgresConfig struct {
 
 // LoadPostgresConfigFromEnv populates PostgresConfig from environment variables with sensible defaults.
 func LoadPostgresConfigFromEnv() PostgresConfig {
-	maxOpen, err := strconv.Atoi(getEnv("DB_MAX_OPEN_CONNS", "25"))
-	if err != nil {
-		maxOpen = 25
+	maxOpen, err := strconv.Atoi(getEnv("DB_MAX_OPEN_CONNS", "100"))
+	if err != nil || maxOpen <= 0 {
+		maxOpen = 100
 	}
 
 	maxIdle, err := strconv.Atoi(getEnv("DB_MAX_IDLE_CONNS", "10"))
-	if err != nil {
+	if err != nil || maxIdle <= 0 {
 		maxIdle = 10
 	}
 
@@ -50,7 +50,7 @@ func LoadPostgresConfigFromEnv() PostgresConfig {
 		TimeZone:        getEnv("DB_TIMEZONE", "Asia/Tehran"),
 		MaxOpenConns:    maxOpen,
 		MaxIdleConns:    maxIdle,
-		ConnMaxLifetime: 30 * time.Minute,
+		ConnMaxLifetime: time.Hour,
 		ConnMaxIdleTime: 10 * time.Minute,
 	}
 }
@@ -99,10 +99,23 @@ func ConnectPostgres(ctx context.Context, cfg PostgresConfig) (*gorm.DB, error) 
 		return nil, fmt.Errorf("failed to retrieve underlying sql.DB: %w", err)
 	}
 
-	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	// Configure connection pooling to prevent DB connection spikes under heavy load
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	if cfg.MaxIdleConns > 0 {
+		sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	}
+	if cfg.MaxOpenConns > 0 {
+		sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	}
+	if cfg.ConnMaxLifetime > 0 {
+		sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	}
+	if cfg.ConnMaxIdleTime > 0 {
+		sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

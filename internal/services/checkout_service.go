@@ -348,27 +348,36 @@ func (s *CheckoutService) findAndVerifyDiscount(db *gorm.DB, code string) (*mode
 	return &discount, nil
 }
 
-func calculateDiscountAmounts(baseAmount int64, discount *models.Discount) (discountAmount int64, finalPayable int64) {
-	if baseAmount <= 0 || discount == nil || discount.Percent <= 0 {
-		return 0, maxInt64(baseAmount, 0)
+// calculateFinalPrice computes the integer discount amount and final payable amount in Tomans.
+// It handles percentage calculation, optional max_discount_amount caps, and prevents negative payables.
+func calculateFinalPrice(originalAmount int64, percent int, maxDiscountAmount int64) (discountAmount int64, finalPayable int64) {
+	if originalAmount <= 0 || percent <= 0 {
+		return 0, maxInt64(originalAmount, 0)
 	}
 
-	pct := int64(discount.Percent)
+	pct := int64(percent)
 	if pct > 100 {
 		pct = 100
 	}
 
-	discountAmount = (baseAmount * pct) / 100
-	if discount.MaxDiscountAmount > 0 && discountAmount > discount.MaxDiscountAmount {
-		discountAmount = discount.MaxDiscountAmount
+	discountAmount = (originalAmount * pct) / 100
+	if maxDiscountAmount > 0 && discountAmount > maxDiscountAmount {
+		discountAmount = maxDiscountAmount
 	}
 
-	if discountAmount > baseAmount {
-		discountAmount = baseAmount
+	if discountAmount > originalAmount {
+		discountAmount = originalAmount
 	}
 
-	finalPayable = baseAmount - discountAmount
+	finalPayable = originalAmount - discountAmount
 	return discountAmount, finalPayable
+}
+
+func calculateDiscountAmounts(baseAmount int64, discount *models.Discount) (discountAmount int64, finalPayable int64) {
+	if discount == nil {
+		return calculateFinalPrice(baseAmount, 0, 0)
+	}
+	return calculateFinalPrice(baseAmount, discount.Percent, discount.MaxDiscountAmount)
 }
 
 func maxInt64(a, b int64) int64 {

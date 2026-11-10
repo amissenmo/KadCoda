@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -29,6 +30,9 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(recoveryMiddleware())
+	router.Use(gzip.Gzip(gzip.DefaultCompression))
+	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.Cors())
 
 	router.NoRoute(func(c *gin.Context) {
 		httputil.AbortWithProblem(
@@ -79,10 +83,11 @@ func NewRouter(deps Dependencies) *gin.Engine {
 	{
 		v1.GET("/health", healthCheckHandler(deps))
 
-		// Authentication & Session endpoints
+		// Authentication & Session endpoints (Rate Limited: 5 req/min per IP, 1 req/min per Mobile for SMS)
 		authGroup := v1.Group("/auth")
+		authGroup.Use(middleware.RateLimit(deps.Redis, 5, 60))
 		{
-			authGroup.POST("/otp/send", authController.SendOTP)
+			authGroup.POST("/otp/send", middleware.RateLimitByMobile(deps.Redis, 1, 60), authController.SendOTP)
 			authGroup.POST("/otp/verify", authController.VerifyOTP)
 			authGroup.POST("/register", authController.Register)
 			authGroup.POST("/login", authController.Login)
@@ -90,18 +95,18 @@ func NewRouter(deps Dependencies) *gin.Engine {
 			authGroup.POST("/logout", authController.Logout)
 		}
 
-		// Public Course Catalog endpoints
+		// Public Course Catalog endpoints (Cached in Redis for 10 minutes)
 		coursesGroup := v1.Group("/courses")
 		{
-			coursesGroup.GET("", courseController.ListCourses)
-			coursesGroup.GET("/:slug", courseController.GetCourseBySlug)
+			coursesGroup.GET("", middleware.RedisCache(deps.Redis, 10*time.Minute), courseController.ListCourses)
+			coursesGroup.GET("/:slug", middleware.RedisCache(deps.Redis, 10*time.Minute), courseController.GetCourseBySlug)
 		}
 
-		// Public CMS Articles endpoints
+		// Public CMS Articles endpoints (Cached in Redis for 10 minutes)
 		articlesGroup := v1.Group("/articles")
 		{
-			articlesGroup.GET("", articleController.ListArticles)
-			articlesGroup.GET("/:slug", articleController.GetArticleBySlug)
+			articlesGroup.GET("", middleware.RedisCache(deps.Redis, 10*time.Minute), articleController.ListArticles)
+			articlesGroup.GET("/:slug", middleware.RedisCache(deps.Redis, 10*time.Minute), articleController.GetArticleBySlug)
 		}
 
 		// Public Payment Gateway Callback (Bank redirects directly without JWT headers)
